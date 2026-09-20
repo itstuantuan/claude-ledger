@@ -1,0 +1,27 @@
+[
+  {
+    "label": "X (Twitter)",
+    "name": "xtwitter",
+    "href": "https://x.com/claudeai"
+  },
+  {
+    "label": "Threads",
+    "name": "threads",
+    "href": "https://www.threads.com/@claudeai"
+  },
+  {
+    "label": "LinkedIn",
+    "name": "linkedin",
+    "href": "https://www.linkedin.com/showcase/claude"
+  },
+  {
+    "label": "YouTube",
+    "name": "youtube",
+    "href": "https://www.youtube.com/@anthropic-ai"
+  },
+  {
+    "label": "Instagram",
+    "name": "instagram",
+    "href": "https://instagram.com/claudeai"
+  }
+]

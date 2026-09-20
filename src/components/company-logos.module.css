@@ -1,0 +1,25 @@
+.slot {
+  opacity: 0;
+  animation: enter .75s cubic-bezier(.33,1,.68,1) forwards;
+}
+.slot img { display: block; animation: none; }
+.logo, .incoming, .outgoing { grid-area: 1 / 1; width: 100%; }
+.outgoing { animation: slideOut .9s cubic-bezier(.87,0,.13,1) forwards; }
+.incoming { animation: slideIn .9s cubic-bezier(.87,0,.13,1) .1s backwards; }
+@keyframes enter {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-50%); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(50%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot { opacity: 1; animation: none; }
+  .incoming, .outgoing { animation: none; }
+  .outgoing { display: none; }
+}

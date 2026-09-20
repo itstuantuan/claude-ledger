@@ -1,0 +1,342 @@
+{
+  "Products": [
+    {
+      "label": "Claude",
+      "href": "https://claude.com/product/overview"
+    },
+    {
+      "label": "Claude Code",
+      "href": "https://claude.com/product/claude-code"
+    },
+    {
+      "label": "Claude Code for Enterprise",
+      "href": "https://claude.com/product/claude-code/enterprise"
+    },
+    {
+      "label": "@Claude",
+      "href": "https://claude.com/product/tag"
+    },
+    {
+      "label": "Claude Design",
+      "href": "https://claude.com/product/design"
+    },
+    {
+      "label": "Claude Science",
+      "href": "https://claude.com/product/claude-science"
+    },
+    {
+      "label": "Claude Security",
+      "href": "https://claude.com/product/claude-security"
+    },
+    {
+      "label": "Download app",
+      "href": "https://platform.claude.com/download"
+    },
+    {
+      "label": "Pricing",
+      "href": "https://claude.com/pricing"
+    },
+    {
+      "label": "Log in",
+      "href": "https://platform.claude.com/login"
+    }
+  ],
+  "Features": [
+    {
+      "label": "Claude in Chrome",
+      "href": "https://claude.com/claude-in-chrome"
+    },
+    {
+      "label": "Claude for Slack",
+      "href": "https://claude.com/claude-for-slack"
+    },
+    {
+      "label": "Claude for Microsoft 365",
+      "href": "https://claude.com/claude-for-microsoft-365"
+    },
+    {
+      "label": "Skills",
+      "href": "https://claude.com/skills"
+    }
+  ],
+  "Models": [
+    {
+      "label": "Mythos",
+      "href": "https://www.anthropic.com/claude/mythos"
+    },
+    {
+      "label": "Fable",
+      "href": "https://www.anthropic.com/claude/fable"
+    },
+    {
+      "label": "Opus",
+      "href": "https://www.anthropic.com/claude/opus"
+    },
+    {
+      "label": "Sonnet",
+      "href": "https://www.anthropic.com/claude/sonnet"
+    },
+    {
+      "label": "Haiku",
+      "href": "https://www.anthropic.com/claude/haiku"
+    }
+  ],
+  "Solutions": [
+    {
+      "label": "AI agents",
+      "href": "https://claude.com/solutions/agents"
+    },
+    {
+      "label": "Code modernization",
+      "href": "https://claude.com/solutions/code-modernization"
+    },
+    {
+      "label": "Coding",
+      "href": "https://claude.com/solutions/coding"
+    },
+    {
+      "label": "Commerce",
+      "href": "https://claude.com/solutions/commerce"
+    },
+    {
+      "label": "Customer support",
+      "href": "https://claude.com/solutions/customer-support"
+    },
+    {
+      "label": "Cybersecurity",
+      "href": "https://claude.com/solutions/cybersecurity"
+    },
+    {
+      "label": "Enterprise",
+      "href": "https://claude.com/solutions/enterprise"
+    },
+    {
+      "label": "Financial services",
+      "href": "https://claude.com/solutions/financial-services"
+    },
+    {
+      "label": "Government",
+      "href": "https://claude.com/solutions/government"
+    },
+    {
+      "label": "Healthcare",
+      "href": "https://claude.com/solutions/healthcare"
+    },
+    {
+      "label": "Higher education",
+      "href": "https://claude.com/solutions/education"
+    },
+    {
+      "label": "K-12 teachers",
+      "href": "https://claude.com/solutions/teachers"
+    },
+    {
+      "label": "Legal",
+      "href": "https://claude.com/solutions/legal"
+    },
+    {
+      "label": "Life sciences",
+      "href": "https://claude.com/solutions/life-sciences"
+    },
+    {
+      "label": "Nonprofits",
+      "href": "https://claude.com/solutions/nonprofits"
+    },
+    {
+      "label": "Small business",
+      "href": "https://claude.com/solutions/small-business"
+    }
+  ],
+  "Claude Platform": [
+    {
+      "label": "Overview",
+      "href": "https://claude.com/platform/api"
+    },
+    {
+      "label": "Developer docs",
+      "href": "https://platform.claude.com/docs"
+    },
+    {
+      "label": "Pricing",
+      "href": "https://claude.com/pricing#api"
+    },
+    {
+      "label": "Ecosystem",
+      "href": "https://claude.com/ecosystem"
+    },
+    {
+      "label": "Marketplace",
+      "href": "https://claude.com/platform/marketplace"
+    },
+    {
+      "label": "Claude on AWS",
+      "href": "https://claude.com/partners/amazon-bedrock"
+    },
+    {
+      "label": "Google Cloud’s Vertex AI",
+      "href": "https://claude.com/partners/google-cloud-vertex-ai"
+    },
+    {
+      "label": "Microsoft Foundry",
+      "href": "https://claude.com/partners/microsoft-foundry"
+    },
+    {
+      "label": "Regional compliance",
+      "href": "https://claude.com/regional-compliance"
+    },
+    {
+      "label": "Console login",
+      "href": "https://platform.claude.com/"
+    }
+  ],
+  "Resources": [
+    {
+      "label": "Blog",
+      "href": "https://claude.com/blog"
+    },
+    {
+      "label": "Claude partner network",
+      "href": "https://claude.com/partners"
+    },
+    {
+      "label": "Community",
+      "href": "https://claude.com/community"
+    },
+    {
+      "label": "Connectors",
+      "href": "https://claude.com/connectors"
+    },
+    {
+      "label": "Courses",
+      "href": "https://claude.com/resources/courses"
+    },
+    {
+      "label": "Customer stories",
+      "href": "https://claude.com/customers"
+    },
+    {
+      "label": "Engineering at Anthropic",
+      "href": "https://www.anthropic.com/engineering"
+    },
+    {
+      "label": "Events",
+      "href": "https://www.anthropic.com/events"
+    },
+    {
+      "label": "Plugins",
+      "href": "https://claude.com/plugins"
+    },
+    {
+      "label": "Powered by Claude",
+      "href": "https://claude.com/partners/powered-by-claude"
+    },
+    {
+      "label": "Service partners",
+      "href": "https://claude.com/partners/services"
+    },
+    {
+      "label": "Tutorials",
+      "href": "https://claude.com/resources/tutorials"
+    },
+    {
+      "label": "Use cases",
+      "href": "https://claude.com/resources/use-cases"
+    }
+  ],
+  "Company": [
+    {
+      "label": "Anthropic",
+      "href": "https://www.anthropic.com/company"
+    },
+    {
+      "label": "Careers",
+      "href": "https://www.anthropic.com/careers"
+    },
+    {
+      "label": "Economic Futures",
+      "href": "https://www.anthropic.com/economic-futures"
+    },
+    {
+      "label": "Research",
+      "href": "https://www.anthropic.com/research"
+    },
+    {
+      "label": "Anthropic news",
+      "href": "https://www.anthropic.com/news"
+    },
+    {
+      "label": "Responsible Scaling Policy",
+      "href": "https://www.anthropic.com/news/announcing-our-updated-responsible-scaling-policy"
+    },
+    {
+      "label": "Security and compliance",
+      "href": "https://trust.anthropic.com/"
+    },
+    {
+      "label": "Transparency",
+      "href": "https://www.anthropic.com/transparency"
+    }
+  ],
+  "Programs": [
+    {
+      "label": "Startups",
+      "href": "https://claude.com/programs/startups"
+    },
+    {
+      "label": "Scientists",
+      "href": "https://claude.com/programs/team-plan-for-scientists"
+    }
+  ],
+  "Help and security": [
+    {
+      "label": "Availability",
+      "href": "https://www.anthropic.com/supported-countries"
+    },
+    {
+      "label": "Check files",
+      "href": "https://claude.com/check-files"
+    },
+    {
+      "label": "Status",
+      "href": "https://status.anthropic.com/"
+    },
+    {
+      "label": "Support center",
+      "href": "https://support.claude.com/en"
+    }
+  ],
+  "Terms and policies": [
+    {
+      "label": "Privacy choices",
+      "href": null
+    },
+    {
+      "label": "Privacy policy",
+      "href": "https://www.anthropic.com/legal/privacy"
+    },
+    {
+      "label": "Responsible disclosure policy",
+      "href": "https://www.anthropic.com/responsible-disclosure-policy"
+    },
+    {
+      "label": "Terms of service: Commercial",
+      "href": "https://www.anthropic.com/legal/commercial-terms"
+    },
+    {
+      "label": "Terms of service: Consumer",
+      "href": "https://www.anthropic.com/legal/consumer-terms"
+    },
+    {
+      "label": "Terms of service: US K-12",
+      "href": "https://www.anthropic.com/legal/k12-terms"
+    },
+    {
+      "label": "Data processing agreement: US K-12",
+      "href": "https://www.anthropic.com/legal/k12-dpa"
+    },
+    {
+      "label": "Usage policy",
+      "href": "https://www.anthropic.com/legal/aup"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+'use client';
+import { useState } from 'react';
+const links = [['Developer Docs','https://platform.claude.com/docs'],['API Reference','https://platform.claude.com/docs/en/api/overview'],['Cookbooks','https://platform.claude.com/cookbook/'],['Quickstart','https://platform.claude.com/docs/en/get-started']];
+export function Header() {
+  const [open,setOpen] = useState(false);
+  return <header className="header" onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}><div className="nav-inner"><a className="wordmark" href="/" aria-label="Claude Console home">Claude Console</a><nav className="desktop-nav" aria-label="Main navigation">{links.map(([label,url])=><a key={label} href={url} target="_blank" rel="noreferrer">{label}</a>)}<a className="sales" href="https://claude.com/contact-sales" target="_blank" rel="noreferrer">Contact sales</a></nav><button className="menu-button" onClick={()=>setOpen(!open)} aria-label={open ? 'Close navigation' : 'Open navigation'} aria-expanded={open} aria-controls="mobile-nav"><span className={open?'menu-lines open':'menu-lines'} /></button></div>{open && <nav id="mobile-nav" className="mobile-nav" aria-label="Mobile navigation">{[...links,['Contact sales','https://claude.com/contact-sales']].map(([label,url])=><a key={label} href={url} target="_blank" rel="noreferrer" onClick={()=>setOpen(false)}>{label}<span aria-hidden="true">↗</span></a>)}</nav>}</header>;
+}
