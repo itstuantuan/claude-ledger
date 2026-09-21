@@ -17,6 +17,8 @@ test('permissions require active identity and explicit grant', () => {
 test('login redirect cannot navigate to external or unapproved pages', () => {
   assert.equal(safeReturnTo('/account'), '/account');
   assert.equal(safeReturnTo('/orders/create'), '/orders/create');
+  assert.equal(safeReturnTo('/ledger'), '/ledger');
+  assert.equal(safeReturnTo('/reconciliation?workerId=w-1'), '/reconciliation?workerId=w-1');
   for (const value of ['//evil.test', 'https://evil.test', '/\\evil.test', '/admin', 'javascript:alert(1)']) assert.equal(safeReturnTo(value), '/dashboard');
 });
 test('login schema validates required fields without trimming passwords', () => {

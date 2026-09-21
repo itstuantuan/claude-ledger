@@ -8,7 +8,7 @@ export function safeReturnTo(value: string | null): string {
   if (!value || /[\\\r\n]/.test(value)) return '/dashboard';
   try {
     const url = new URL(value, 'https://local.invalid');
-    return url.origin === 'https://local.invalid' && ['/dashboard', '/account', '/workers', '/teams', '/projects', '/materials', '/pricing', '/orders', '/orders/create', '/returns', '/payments', '/prepaid'].includes(url.pathname)
+    return url.origin === 'https://local.invalid' && ['/dashboard', '/account', '/workers', '/teams', '/projects', '/materials', '/pricing', '/orders', '/orders/create', '/returns', '/payments', '/prepaid', '/ledger', '/reconciliation'].includes(url.pathname)
       ? url.pathname + url.search : '/dashboard';
   } catch { return '/dashboard'; }
 }

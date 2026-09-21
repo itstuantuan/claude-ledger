@@ -1,4 +1,4 @@
-import { Home, UserRound, UsersRound, HardHat, MapPinned, PackageOpen, BadgeDollarSign, FilePlus2, ReceiptText, RotateCcw, HandCoins, WalletCards } from 'lucide-react';
+import { Home, UserRound, UsersRound, HardHat, MapPinned, PackageOpen, BadgeDollarSign, FilePlus2, ReceiptText, RotateCcw, HandCoins, WalletCards, BookOpenText, FileCheck2 } from 'lucide-react';
 export const navigation = [
   { href: '/dashboard', label: '工作台', icon: Home, description: '门店工作台', group: '工作空间' },
   { href: '/orders/create', label: '开用料单', icon: FilePlus2, description: '快速创建客户用料单', group: '业务管理' },
@@ -11,5 +11,7 @@ export const navigation = [
   { href: '/pricing', label: '客户价格', icon: BadgeDollarSign, description: '油漆工专属材料价格', group: '材料管理' },
   { href: '/payments', label: '收款', icon: HandCoins, description: '登记客户付款并冲减应收', group: '财务管理' },
   { href: '/prepaid', label: '预存款', icon: WalletCards, description: '登记和查看客户预存资金', group: '财务管理' },
+  { href: '/ledger', label: '往来账', icon: BookOpenText, description: '查看客户往来与应收余额', group: '财务管理' },
+  { href: '/reconciliation', label: '客户对账', icon: FileCheck2, description: '按日期生成客户对账单', group: '财务管理' },
   { href: '/account', label: '我的账号', icon: UserRound, description: '账号信息与访问权限', group: '系统' },
 ];

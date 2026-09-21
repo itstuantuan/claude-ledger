@@ -11,6 +11,7 @@ export const orderItemInputSchema = z.object({
 });
 export const orderInputSchema = z.object({
   workerId: z.string().min(1, '请选择油漆工'), projectId: z.string().nullable().default(null),
+  occurredAt: z.string().min(1, '请选择业务日期'),
   items: z.array(orderItemInputSchema).min(1, '至少添加一种材料'),
   paymentAmount: moneySchema.default('0.00'), prepaidDeduction: moneySchema.default('0.00'),
   paymentMethod: paymentMethodSchema.nullable().default(null), note: z.string().trim().max(200).default(''),
@@ -26,8 +27,9 @@ export const orderSchema = z.object({
   projectId: z.string().nullable(), projectName: z.string().nullable(), items: z.array(orderItemSchema),
   goodsAmount: z.string(), discountAmount: z.string(), finalAmount: z.string(),
   paymentAmount: z.string(), prepaidDeduction: z.string(), addedReceivable: z.string(),
+  returnedAmount: z.string(), settledAmount: z.string(), outstandingAmount: z.string(),
   paymentMethod: paymentMethodSchema.nullable(), status: orderStatusSchema, note: z.string(),
-  createdAt: z.string(), operatorName: z.string(),
+  occurredAt: z.string(), createdAt: z.string(), operatorName: z.string(),
 });
 export const orderPageSchema = pageMetaSchema.extend({ items: z.array(orderSchema) });
 

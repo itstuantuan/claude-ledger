@@ -1,67 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowUpRight, ShieldCheck, ClipboardList, Users, Paintbrush } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
-import { roleLabels } from '@/lib/auth/permissions';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, FilePlus2, ReceiptText, TrendingUp, Users, WalletCards } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ErrorState, LoadingState } from '@/components/common/error-state';
+import { useAuthStore } from '@/stores/auth-store';
+import { can, roleLabels } from '@/lib/auth/permissions';
+import { dashboardApi } from '@/lib/api/dashboard';
 import { isMock } from '@/lib/api/auth';
+import { formatMoney, toMinorUnits } from '@/lib/utils/money';
 
-const modules = [
-  { icon: Users, title: '客户与工地', description: '油漆工、施工队、工地项目，清楚记录每一次合作。', status: '下一阶段' },
-  { icon: Paintbrush, title: '材料与用料', description: '材料资料、客户价格、用料单和退料记录。', status: '待开放' },
-  { icon: ClipboardList, title: '账款与对账', description: '收款、预存、往来明细与客户对账。', status: '待开放' },
-];
+const statClass='rounded-xl border border-black/10 bg-white p-5 [&_span]:text-[11px] [&_span]:text-[#77756e] [&_strong]:mt-3 [&_strong]:block [&_strong]:text-[22px] [&_strong]:font-medium';
+const typeLabels={ORDER:'用料单',PAYMENT:'收款',RETURN:'退料'} as const;
 
-export function WorkspaceHome() {
-  const user = useAuthStore((state) => state.user);
-
+export function WorkspaceHome(){
+  const user=useAuthStore((state)=>state.user),allowed=can(user,'reports:read');
+  const query=useQuery({queryKey:['dashboard-summary'],queryFn:({signal})=>dashboardApi.get(signal),enabled:allowed});
+  const data=query.data;
+  const maxTrend=data?Math.max(1,...data.trend.flatMap(item=>[Number(toMinorUnits(item.materialAmount)),Number(toMinorUnits(item.paymentAmount))])):1;
   return <>
-    <header className="mb-8 flex items-end justify-between gap-5 max-[600px]:flex-col max-[600px]:items-start">
-      <div>
-        <p className="mb-2 text-xs text-[#8a8985]">门店工作台</p>
-        <h1 className="font-serif text-[30px] font-medium tracking-[-.6px] text-[#11110f]">欢迎回来，{user?.name}</h1>
-        <p className="mt-2.5 text-[13px] text-[#77756e]">账目清楚，经营有数。</p>
-      </div>
-      <Button asChild variant="outline"><Link href="/account"><ShieldCheck size={16} />查看账号权限</Link></Button>
-    </header>
-
-    {isMock && <div className="mb-5 flex items-center gap-2.5 rounded-lg border border-black/10 bg-[#f7f7f5] px-4 py-3 text-xs text-[#66645f]">
-      <span className="size-1.5 shrink-0 rounded-full bg-[#77756e]" />
-      <p>当前为模拟环境，仅供登录与界面体验。业务功能将分阶段开放。</p>
-    </div>}
-
-    <section className="relative mb-5 min-h-[270px] overflow-hidden rounded-2xl border border-black/10 bg-[#fcfcfb] p-9 max-[600px]:min-h-0 max-[600px]:p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(138,137,133,.22)_1px,transparent_1.2px)] bg-[size:14px_14px] [mask-image:linear-gradient(90deg,transparent_30%,black)] max-[700px]:hidden" aria-hidden="true" />
-      <div className="relative z-10 max-w-[520px]">
-        <span className="text-[11px] text-[#77756e]">云记账 · 油漆门店</span>
-        <h2 className="my-4 font-serif text-[32px] font-medium leading-[1.35] tracking-[-.7px] text-[#11110f] max-[600px]:text-[27px]">从每一笔往来，<br />看清门店经营。</h2>
-        <p className="text-[13px] leading-6 text-[#66645f]">客户、工地、材料与账款，在同一个工作空间里有序管理。</p>
-        <div className="mt-7 flex items-center gap-2.5 text-xs text-[#52514e]">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-black/10 bg-white">{user?.name.slice(0, 1)}</span>
-          <span>{user?.name}<small className="mt-1 block text-[10px] text-[#8a8985]">{user ? roleLabels[user.role] : ''} · 账号已登录</small></span>
-          <ShieldCheck className="ml-2 text-[#77756e]" size={18} />
-        </div>
-      </div>
-    </section>
-
-    <section className="overflow-hidden rounded-2xl border border-black/10 bg-[#fcfcfb]">
-      <div className="flex items-start justify-between gap-4 border-b border-black/10 px-6 py-5 max-[600px]:px-5">
-        <div><h2 className="text-base font-medium text-[#11110f]">门店业务</h2><p className="mt-1.5 text-xs text-[#8a8985]">以下模块尚未开放，现有本地账本数据已保留。</p></div>
-        <span className="whitespace-nowrap rounded-md border border-black/10 bg-[#f7f7f5] px-2 py-1 text-[10px] text-[#66645f]">陆续开放</span>
-      </div>
-      <div className="grid grid-cols-3 max-[900px]:grid-cols-1">
-        {modules.map(({ icon: Icon, title, description, status }, index) => <article className="group flex min-h-[190px] flex-col border-black/10 p-6 transition-colors hover:bg-[#f7f7f5] max-[900px]:min-h-0 max-[900px]:border-b max-[900px]:last:border-b-0 min-[901px]:border-r min-[901px]:last:border-r-0" key={title}>
-          <span className="grid size-9 place-items-center rounded-lg border border-black/10 bg-white text-[#52514e]"><Icon size={18} strokeWidth={1.6} /></span>
-          <div className="mt-8 max-[900px]:mt-5"><h3 className="text-sm font-medium text-[#22211f]">{title}</h3><p className="mt-2 text-xs leading-5 text-[#77756e]">{description}</p></div>
-          <span className="mt-auto pt-5 text-[10px] text-[#8a8985]">{String(index + 1).padStart(2, '0')} · {status}</span>
-        </article>)}
-      </div>
-    </section>
-
-    <div className="mt-5 flex items-center justify-between text-[11px] text-[#8a8985]">
-      <span>当前登录身份：{user ? roleLabels[user.role] : ''}</span>
-      <Link className="flex items-center gap-1 text-[#52514e] hover:text-black" href="/account">查看我的账号<ArrowUpRight size={14} /></Link>
-    </div>
+    <header className="flex items-start justify-between gap-5 max-[600px]:flex-col"><div><p>门店工作台</p><h1>欢迎回来，{user?.name}</h1><p>账目清楚，经营有数。</p></div><div className="flex gap-2"><Button asChild variant="outline"><Link href="/orders"><ReceiptText size={15}/>用料记录</Link></Button><Button asChild><Link href="/orders/create"><FilePlus2 size={15}/>开用料单</Link></Button></div></header>
+    {isMock&&<div className="mb-4 flex items-center gap-2.5 rounded-lg border border-black/10 bg-[#f7f7f5] px-4 py-3 text-xs text-[#66645f]"><span className="size-1.5 rounded-full bg-[#77756e]"/>本地模拟环境 · 新增业务会实时计入下方统计，服务重启后恢复种子数据。</div>}
+    {!allowed?<section className="rounded-2xl border border-black/10 bg-white p-8"><h2 className="text-lg font-medium">你好，{user?.name}</h2><p className="mt-2 text-sm text-[#77756e]">当前身份为{user?roleLabels[user.role]:''}，经营统计仅向老板和财务开放。你可以继续处理客户、材料和用料业务。</p><div className="mt-6 flex flex-wrap gap-2"><Button asChild><Link href="/orders/create">开用料单</Link></Button><Button asChild variant="outline"><Link href="/workers">查看油漆工</Link></Button><Button asChild variant="outline"><Link href="/materials">查看材料</Link></Button></div></section>:query.isPending?<LoadingState label="正在汇总门店经营数据…"/>:query.isError?<ErrorState error={query.error} retry={()=>void query.refetch()}/>:data&&<>
+      <section className="mb-4 grid grid-cols-4 gap-3 max-[1050px]:grid-cols-2 max-[560px]:grid-cols-1"><div className={statClass}><span>累计用料金额</span><strong>{formatMoney(data.summary.materialTotal)}</strong><small className="mt-2 block text-[10px] text-[#8a8985]">{data.summary.activeWorkers} 位活跃油漆工</small></div><div className={statClass}><span>累计回款</span><strong>{formatMoney(data.summary.paymentTotal)}</strong><small className="mt-2 block text-[10px] text-[#8a8985]">含开单当场付款和后续收款</small></div><div className={statClass}><span>当前应收</span><strong className="text-[#a34e40]">{formatMoney(data.summary.receivable)}</strong><small className="mt-2 block text-[10px] text-[#8a8985]">已扣除付款、预存抵扣与退料</small></div><div className={statClass}><span>累计退料</span><strong>{formatMoney(data.summary.returnTotal)}</strong><small className="mt-2 block text-[10px] text-[#8a8985]">{data.summary.activeProjects} 个进行中项目</small></div></section>
+      <section className="mb-4 grid grid-cols-[minmax(0,1.6fr)_minmax(300px,.8fr)] gap-3 max-[950px]:grid-cols-1"><article className="rounded-xl border border-black/10 bg-white p-5"><div className="flex items-start justify-between"><div><h2 className="font-medium">近 6 个月业务趋势</h2><p className="mt-1 text-[11px] text-[#8a8985]">用料金额与客户回款</p></div><TrendingUp size={18} className="text-[#64795d]"/></div><div className="mt-6 flex items-center justify-end gap-4 text-[10px] text-[#77756e]"><span className="flex items-center gap-1.5"><i className="size-2 rounded-sm bg-[#6e8b72]"/>用料</span><span className="flex items-center gap-1.5"><i className="size-2 rounded-sm bg-[#d4aa7e]"/>回款</span></div><div className="mt-3 grid h-[210px] grid-cols-6 gap-3 border-b border-black/10 max-[600px]:gap-1.5">{data.trend.map(item=><div className="flex min-w-0 flex-col items-center justify-end gap-2" key={item.month} title={`${item.month} 用料 ${formatMoney(item.materialAmount)}，回款 ${formatMoney(item.paymentAmount)}`}><div className="flex h-[170px] w-full items-end justify-center gap-1"><i className="w-[28%] max-w-5 rounded-t bg-[#6e8b72]" style={{height:`${Math.max(3,Number(toMinorUnits(item.materialAmount))/maxTrend*100)}%`}}/><i className="w-[28%] max-w-5 rounded-t bg-[#d4aa7e]" style={{height:`${Math.max(3,Number(toMinorUnits(item.paymentAmount))/maxTrend*100)}%`}}/></div><span className="text-[10px] text-[#8a8985]">{Number(item.month.slice(5))}月</span></div>)}</div></article><article className="rounded-xl border border-black/10 bg-white p-5"><div className="flex items-start justify-between"><div><h2 className="font-medium">应收排行</h2><p className="mt-1 text-[11px] text-[#8a8985]">优先跟进欠款较高的客户</p></div><Button asChild size="icon" variant="ghost"><Link href="/ledger" aria-label="查看往来账"><ArrowRight size={15}/></Link></Button></div><div className="mt-4 grid">{data.topDebtors.map((item,index)=><Link className="flex items-center gap-3 border-b border-black/5 py-3 last:border-0" href={`/reconciliation?workerId=${item.workerId}`} key={item.workerId}><span className="grid size-7 place-items-center rounded-lg bg-[#efeeeb] text-[11px]">{index+1}</span><span className="min-w-0 flex-1"><strong className="block truncate text-xs font-medium">{item.workerName}</strong><small className="mt-1 block truncate text-[10px] text-[#8a8985]">{item.teamName||'独立油漆工'}</small></span><em className="text-xs font-medium not-italic text-[#a34e40]">{formatMoney(item.receivable)}</em></Link>)}</div></article></section>
+      <section className="mb-5 overflow-hidden rounded-xl border border-black/10 bg-white"><div className="flex items-start justify-between border-b border-black/10 px-5 py-4"><div><h2 className="font-medium">最近业务</h2><p className="mt-1 text-[11px] text-[#8a8985]">本次运行期间登记的用料、收款和退料</p></div><span className="text-[10px] text-[#8a8985]">更新于 {new Date(data.generatedAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</span></div>{data.recent.length?<div className="overflow-auto"><table className="w-full min-w-[680px] text-left text-xs"><thead className="bg-[#fafaf8] text-[#77756e]"><tr><th className="px-5 py-3 font-medium">业务类型</th><th className="px-5 py-3 font-medium">单号</th><th className="px-5 py-3 font-medium">油漆工</th><th className="px-5 py-3 font-medium">金额</th><th className="px-5 py-3 font-medium">时间</th></tr></thead><tbody>{data.recent.map(item=><tr className="border-t border-black/5" key={item.id}><td className="px-5 py-3.5"><span className="rounded-md bg-[#efeeeb] px-2 py-1 text-[10px]">{typeLabels[item.type]}</span></td><td className="px-5 py-3.5">{item.referenceNo}</td><td className="px-5 py-3.5">{item.workerName}</td><td className="px-5 py-3.5 font-medium">{formatMoney(item.amount)}</td><td className="px-5 py-3.5 text-[#77756e]">{new Date(item.occurredAt).toLocaleString('zh-CN')}</td></tr>)}</tbody></table></div>:<div className="grid min-h-32 place-items-center text-center text-xs text-[#8a8985]"><div><WalletCards className="mx-auto mb-2" size={22}/><p>暂无本次运行期间的新业务</p></div></div>}</section>
+      <div className="flex items-center justify-between pb-5 text-[11px] text-[#8a8985]"><span><Users className="mr-1 inline" size={13}/>当前登录：{user?roleLabels[user.role]:''}</span><Link className="flex items-center gap-1 text-[#52514e] hover:underline" href="/ledger">查看完整往来账<ArrowRight size={13}/></Link></div>
+    </>}
   </>;
 }

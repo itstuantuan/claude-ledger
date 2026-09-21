@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: 油漆门店经营管理 API — Phase 1
-  version: 0.1.0
-  description: Go 后端认证合同草案。本地 mock 使用相同响应结构；生产认证由 Go 实现。
+  title: 油漆门店经营管理 API — Phase 7
+  version: 0.7.0
+  description: Go 后端合同草案。本地 mock 使用相同响应结构；生产认证与业务持久化由 Go 实现。
 servers:
   - url: http://localhost:8080/api/v1
 paths:
@@ -53,6 +53,36 @@ paths:
               schema: {$ref: '#/components/schemas/User'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
+  /ledger/statement:
+    get:
+      summary: 生成客户往来对账单
+      description: 期末应收 = 期初应收 + 用料金额 - 付款 - 预存抵扣 - 已确认退料冲减。
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: workerId, in: query, required: true, schema: {type: string}}
+        - {name: from, in: query, required: false, schema: {type: string, format: date}}
+        - {name: to, in: query, required: false, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: 客户在指定期间的往来汇总和逐笔余额
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LedgerStatement'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+  /dashboard/summary:
+    get:
+      summary: 门店经营统计
+      description: 返回当前累计指标、近六月趋势、应收排行和最近业务，仅限具有 reports:read 权限的用户。
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: 工作台统计数据
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DashboardSummary'}
+        '403': {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -74,6 +104,94 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/ApiError'}
   schemas:
+    DashboardSummary:
+      type: object
+      required: [generatedAt, summary, trend, topDebtors, recent]
+      properties:
+        generatedAt: {type: string, format: date-time}
+        summary:
+          type: object
+          required: [materialTotal, paymentTotal, returnTotal, receivable, activeWorkers, activeProjects]
+          properties:
+            materialTotal: {type: string}
+            paymentTotal: {type: string}
+            returnTotal: {type: string}
+            receivable: {type: string}
+            activeWorkers: {type: integer}
+            activeProjects: {type: integer}
+        trend:
+          type: array
+          items:
+            type: object
+            required: [month, materialAmount, paymentAmount]
+            properties:
+              month: {type: string}
+              materialAmount: {type: string}
+              paymentAmount: {type: string}
+        topDebtors:
+          type: array
+          items:
+            type: object
+            required: [workerId, workerName, teamName, receivable]
+            properties:
+              workerId: {type: string}
+              workerName: {type: string}
+              teamName: {type: [string, 'null']}
+              receivable: {type: string}
+        recent:
+          type: array
+          items:
+            type: object
+            required: [id, type, referenceNo, workerName, amount, occurredAt]
+            properties:
+              id: {type: string}
+              type: {type: string, enum: [ORDER, PAYMENT, RETURN]}
+              referenceNo: {type: string}
+              workerName: {type: string}
+              amount: {type: string}
+              occurredAt: {type: string, format: date-time}
+    LedgerStatement:
+      type: object
+      required: [worker, from, to, generatedAt, summary, entries]
+      properties:
+        worker:
+          type: object
+          required: [id, name, phone, teamName]
+          properties:
+            id: {type: string}
+            name: {type: string}
+            phone: {type: string}
+            teamName: {type: [string, 'null']}
+        from: {type: [string, 'null'], format: date}
+        to: {type: [string, 'null'], format: date}
+        generatedAt: {type: string, format: date-time}
+        summary:
+          type: object
+          required: [openingBalance, chargeTotal, paymentTotal, prepaidTotal, returnTotal, closingBalance]
+          properties:
+            openingBalance: {type: string}
+            chargeTotal: {type: string}
+            paymentTotal: {type: string}
+            prepaidTotal: {type: string}
+            returnTotal: {type: string}
+            closingBalance: {type: string}
+        entries:
+          type: array
+          items:
+            type: object
+            required: [id, type, referenceNo, occurredAt, description, chargeAmount, paymentAmount, prepaidAmount, returnAmount, balance, operatorName]
+            properties:
+              id: {type: string}
+              type: {type: string, enum: [ORDER, PAYMENT, RETURN]}
+              referenceNo: {type: string}
+              occurredAt: {type: string, format: date-time}
+              description: {type: string}
+              chargeAmount: {type: string}
+              paymentAmount: {type: string}
+              prepaidAmount: {type: string}
+              returnAmount: {type: string}
+              balance: {type: string}
+              operatorName: {type: string}
     User:
       type: object
       required: [id, name, account, role, permissions, status]

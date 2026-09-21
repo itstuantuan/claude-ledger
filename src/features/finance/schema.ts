@@ -24,6 +24,7 @@ export const prepaidPageSchema = pageMetaSchema.extend({ items: z.array(prepaidS
 
 export const returnInputSchema = z.object({
   orderId: z.string().min(1, '请选择原用料单'),
+  occurredAt: z.string().min(1, '请选择退料日期').default(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())),
   items: z.array(z.object({ materialId: z.string(), quantity: quantitySchema })).min(1, '至少选择一种退料材料'),
   note: z.string().trim().max(200).default(''),
 });
@@ -31,7 +32,7 @@ export const returnStatusSchema = z.enum(['PENDING', 'CONFIRMED', 'REVERSED']);
 export const returnSchema = z.object({
   id: z.string(), returnNo: z.string(), orderId: z.string(), orderNo: z.string(), workerId: z.string(), workerName: z.string(),
   items: z.array(z.object({ materialId: z.string(), materialName: z.string(), unit: z.string(), quantity: z.string(), unitPrice: z.string(), amount: z.string() })),
-  amount: z.string(), receivableReduction: z.string(), status: returnStatusSchema, note: z.string(), operatorName: z.string(), createdAt: z.string(),
+  amount: z.string(), receivableReduction: z.string(), status: returnStatusSchema, note: z.string(), operatorName: z.string(), occurredAt: z.string(), createdAt: z.string(),
 });
 export const returnPageSchema = pageMetaSchema.extend({ items: z.array(returnSchema) });
 

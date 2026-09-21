@@ -32,7 +32,9 @@ let projects: Project[] = [
 ];
 
 export function findMockWorker(id:string){return workers.find((item)=>item.id===id);}
+export function listMockWorkers(){return [...workers];}
 export function findMockProject(id:string){return projects.find((item)=>item.id===id);}
+export function listMockProjects(){return [...projects];}
 export function updateMockWorkerFinancials(id:string, change:{materialTotal?:bigint;returnTotal?:bigint;paymentTotal?:bigint;prepaidBalance?:bigint;receivable?:bigint;occurredAt?:string}) {
   const worker=workers.find((item)=>item.id===id);if(!worker)return undefined;
   const add=(value:string,delta=0n)=>fromMinorUnits(toMinorUnits(value)+delta);
