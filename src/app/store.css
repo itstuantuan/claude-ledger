@@ -1,0 +1,18 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "../";
+
+@theme inline {
+  --color-background: #fcfcfb;
+  --color-foreground: #20211f;
+  --color-primary: #284735;
+  --color-primary-foreground: #ffffff;
+  --color-border: #e7e7e3;
+  --color-muted: #f7f7f5;
+  --color-muted-foreground: #71766e;
+  --color-ring: #51715d;
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --radius-md: 8px;
+}

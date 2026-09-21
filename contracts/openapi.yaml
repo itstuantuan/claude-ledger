@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: 油漆门店经营管理 API — Phase 1
+  version: 0.1.0
+  description: Go 后端认证合同草案。本地 mock 使用相同响应结构；生产认证由 Go 实现。
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /auth/login:
+    post:
+      summary: 账号密码登录
+      description: 返回短期 access token；设置 HttpOnly refresh cookie。校验 Origin，限制登录尝试；账号停用返回 403。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account, password]
+              properties:
+                account: {type: string, minLength: 1, maxLength: 80}
+                password: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        '200': {$ref: '#/components/responses/Session'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /auth/refresh:
+    post:
+      summary: 用 HttpOnly cookie 恢复会话
+      description: 前端合并并发刷新；服务端负责 cookie 安全、刷新令牌轮换及失效。返回数据禁止缓存。
+      responses:
+        '200': {$ref: '#/components/responses/Session'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /auth/logout:
+    post:
+      summary: 撤销 refresh 会话并清除 cookie
+      description: 重复退出也返回 204；校验 Origin；清除 cookie 的 path/domain 必须与设置时一致。
+      responses:
+        '204': {description: 已退出}
+        '403': {$ref: '#/components/responses/Error'}
+  /auth/me:
+    get:
+      summary: 当前身份与权限
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: 当前有效用户
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  responses:
+    Session:
+      description: 会话已建立或刷新；Cache-Control 为 no-store
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [accessToken, expiresIn, user]
+            properties:
+              accessToken: {type: string, minLength: 1}
+              expiresIn: {type: integer, minimum: 1}
+              user: {$ref: '#/components/schemas/User'}
+    Error:
+      description: 统一错误响应（401/403/404/409/422/429/500）
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+  schemas:
+    User:
+      type: object
+      required: [id, name, account, role, permissions, status]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        account: {type: string}
+        role: {type: string, enum: [OWNER, FINANCE, CLERK]}
+        status: {type: string, enum: [ACTIVE, DISABLED]}
+        permissions:
+          type: array
+          items:
+            type: string
+            enum: ['workers:read', 'workers:write', 'materials:read', 'materials:write', 'orders:create', 'returns:request', 'returns:confirm', 'returns:manual', 'finance:read', 'payments:create', 'prepaid:deposit', 'ledger:adjust', 'reconciliation:read', 'reports:read', 'system:manage']
+    ApiError:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        requestId: {type: string}
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: array
+            items: {type: string}

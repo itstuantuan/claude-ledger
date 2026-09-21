@@ -1,0 +1,1 @@
+import { TeamDetail } from '@/features/customers/detail-pages';export const metadata={title:'施工队详情'};export default async function Page({params}:{params:Promise<{id:string}>}){return <TeamDetail id={(await params).id}/>}

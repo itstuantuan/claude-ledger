@@ -1,24 +1,67 @@
-# 云记账 · 本地演示版
+# 云记账 · 油漆门店经营管理
 
-基于 Next.js App Router、React 和 TypeScript 的客户与材料记账工作台。保留原有侧边栏、卡片和弹窗布局风格，只改造 `/dashboard` 的业务内容；首页登录界面暂时仍是原来的本地预览。
+在原有暖白、灰绿界面的基础上分阶段开发。目前完成 **Phase 1：布局、登录、API 与会话基础** 和 **Phase 2：油漆工、施工队、工地/项目**。材料、开单和财务功能尚未开放；本版本不能用于真实经营记账。
 
-## 运行
+## 本地启动
 
-```powershell
-npm.cmd install
-npm.cmd run dev
+需要 Node.js 20.9+（当前验证环境 Node 22）。使用 npm 和 package-lock.json 安装。
+
+```bash
+npm ci
+cp .env.example .env.local
 ```
 
-访问 http://localhost:3000/dashboard 。可用 `npm.cmd run typecheck` 和 `npm.cmd run build` 检查项目。
+没有 Go 后端时将 `.env.local` 改为：
 
-## 当前功能
+```dotenv
+NEXT_PUBLIC_API_MODE=mock
+NEXT_PUBLIC_API_BASE_URL=
+ALLOW_LOCAL_MOCK_BUILD=true
+```
 
-- 新增客户，登记客户账款、材料采购以及已收/已付金额。
-- 按客户、材料、日期、备注检索账目；客户账本可筛选待收款。按 `Ctrl K` 打开全局检索。
-- 概览显示客户账款、采购成本、待收款、账面利润以及月度趋势。
-- 年度汇总按月展示数据，支持导出带 UTF-8 BOM 的 CSV，方便在 Excel 中打开。
-- 首次访问显示示例数据。后续数据储存在当前浏览器的 `localStorage` 中，刷新后保留。删除账目需二次确认。
+```bash
+npm run build
+npm run start -- --port 3001
+```
 
-## 正式使用前
+访问 http://127.0.0.1:3001/login 。开发时运行 `npm run dev -- --port 3001`。
 
-这是单浏览器演示版，不是财务系统。浏览器清理站点数据会丢失账目，且不支持跨设备同步、用户权限、审计记录或自动备份。账面利润仅为客户账款减材料采购，未包含工资、税费和其他费用；正式上线需设计服务端数据库、认证与权限、备份、收付款流水、数据校验及完整的会计口径。
+本地 mock 测试账号：`owner`（老板）、`finance`（财务）、`clerk`（店员）；密码均为 `Paint123!`。这是公开测试凭据，与真实账号无关。模拟服务仅允许 localhost/127.0.0.1；生产构建默认禁止 mock，`ALLOW_LOCAL_MOCK_BUILD=true` 是本机预览的显式例外，不应配置到正式部署。
+
+## 已完成
+
+- 原有视觉主题，折叠侧栏、平板抽屉、面包屑、页面搜索（Ctrl/Cmd K）、通知空状态和用户菜单。
+- 中文账号密码登录、字段校验、显示密码、请求期间禁用按钮、错误提示、退出。
+- 受保护的工作台和账号页；登录后恢复安全的本地跳转；403/404、加载/失败/重试状态。
+- API Client 统一基址、Authorization、JSON/schema、credentials、错误、取消请求与幂等 key。
+- access token 仅内存；HttpOnly cookie 恢复会话；并发 401 单次刷新；第二次 401 退出；账号切换清空 Query 缓存。
+- Zustand 管理 UI/会话；TanStack Query 管理请求；React Hook Form + Zod 校验；Tailwind、shadcn/ui 风格基础组件、Lucide、date-fns。
+- 统一整数分金额工具，避免浮点计算；ESLint、strict TypeScript、Node 测试。
+- 油漆工列表、详情、搜索、施工队/欠款/状态筛选、排序和分页；老板可新增编辑，店员/财务按权限只读。
+- 施工队列表和详情，明确施工队只聚合成员金额；工地/项目列表和详情，支持多油漆工关联、日期与状态校验。
+- Phase 2 REST Client、Zod 合同和显式 mock；并发编辑使用 `version` 返回 409，模拟写入在服务重启后恢复为种子数据。
+
+## 接入独立 Go 后端
+
+将 `.env.local` 的 `NEXT_PUBLIC_API_MODE` 改为 `real`，设置 `NEXT_PUBLIC_API_BASE_URL`（含 `/api/v1`），重启/重新构建。公开环境变量在 Next 构建时注入。
+
+认证合同见 `contracts/openapi.yaml`。Go 实现 login/refresh/logout/me，返回合同中的用户和权限。Cookie 要设置 HttpOnly、合适的 SameSite、path 和 secure；跨源开发需准确配置允许源及 credentials；Cookie 写入接口需防 CSRF。前端提供原生 Origin 请求头，mock 校验同源。
+
+真实模式不静默回退到 mock。前端 Guard 和 PermissionGate 只控制界面，服务端必须逐请求验证权限、令牌和账号状态。mock 使用进程内会话，服务重启后会话失效，不具备正式身份系统的密码存储、持久会话或登录限流。
+
+## 验证
+
+```bash
+npm run test
+npm run lint
+npm run build
+npm run typecheck
+```
+
+路由变化时可先运行 `npx next typegen` 刷新生成类型。测试覆盖并发刷新、刷新失败、过期退出、幂等键保留、取消请求、各类错误、字段映射、Decimal 格式化与权限基础。
+
+## 原代码与数据
+
+原 `src/app/dashboard/workspace.tsx` 及 CSS 保留供后续迁移，目前未被新路由调用。原 localStorage `yunji-ledger-v1` 不读取、不覆盖、不自动迁移；新 UI 偏好单独使用 `paint-store-ui-v1`。旧预览组件中有尚未迁移的代码，ESLint 对原冻结文件的既有 effect 模式有定点例外，新增代码执行完整检查。
+
+后续严格依次推进：Phase 2 客户/施工队/工地，Phase 3 材料/价格，Phase 4 用料单，Phase 5 收款/预存/退料，Phase 6 往来账/对账，Phase 7 工作台统计，Phase 8 用户/权限管理/日志。

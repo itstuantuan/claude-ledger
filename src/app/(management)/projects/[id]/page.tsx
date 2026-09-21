@@ -1,0 +1,1 @@
+import { ProjectDetail } from '@/features/customers/detail-pages';export const metadata={title:'项目详情'};export default async function Page({params}:{params:Promise<{id:string}>}){return <ProjectDetail id={(await params).id}/>}
