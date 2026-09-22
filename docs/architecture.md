@@ -2,8 +2,18 @@
 
 ## 1. 目标目录
 
+前后端采用两个完全独立、平级的项目：
+
 ```text
-backend/
+/Users/admin/Documents/
+├── claude-ledger/          # Next.js 前端
+└── claude-ledger-backend/  # Go API
+```
+
+后端仓库内部：
+
+```text
+claude-ledger-backend/
 ├── cmd/server/main.go
 ├── internal/
 │   ├── platform/
@@ -56,7 +66,7 @@ Repository implementations -> GORM/PostgreSQL
 
 ## 4. Phase 1 具体任务
 
-1. 建立 `backend/` Go module 与 feature-based 空间，只创建本阶段需要的 platform 包。
+1. 建立独立平级项目 `../claude-ledger-backend` 及 Go module，与前端分别构建、部署和回滚；只创建本阶段需要的 platform 包。
 2. 实现 Config：APP_ENV、APP_PORT、DATABASE_URL、JWT 配置占位、CORS_ORIGINS、LOG_LEVEL、HTTP/DB timeout。
 3. 实现 Zap logger、敏感 header 过滤和环境化编码器。
 4. 实现数据库连接池、ping、context timeout；不调用 AutoMigrate。
