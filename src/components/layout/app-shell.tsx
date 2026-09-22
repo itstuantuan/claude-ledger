@@ -29,6 +29,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const logout = useMutation({ mutationFn: authApi.logout, onSuccess: () => router.replace('/login') });
+  const activeHref = navigation
+    .filter(({ href }) => pathname === href || pathname.startsWith(`${href}/`))
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -64,13 +67,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         <button className={cn('mb-5 flex h-10 w-full items-center gap-2 rounded-lg border border-[#deded9] bg-white px-2.5 text-left text-xs text-[#77756e]', mini && 'justify-center px-0')} onClick={() => { setMobile(false); setSearch(true); }}><Search size={16} />{!mini && <><span>搜索页面…</span><kbd className="ml-auto text-[10px]">⌘ K</kbd></>}</button>
         <nav className="grid" aria-label="主导航">{groups.map((group) => {
           const items = navigation.filter((item) => item.group === group);
-          if (mini || group === '工作空间') return <div className={cn('grid gap-0.5', !mini && 'mb-2')} key={group}>{items.map(({ href, label, icon: Icon }) => { const selected = pathname === href || pathname.startsWith(`${href}/`); return <Link key={href} href={href} title={label} aria-current={selected ? 'page' : undefined} className={cn('flex h-10 items-center gap-3 rounded-lg px-2.5 text-[13px] text-[#555550] transition-colors hover:bg-[#ededeb]', selected && 'bg-[#e4e4e1] font-medium text-[#171714]', mini && 'justify-center px-0')} onClick={() => setMobile(false)}><Icon className="shrink-0 text-[#8f8f89]" size={18} strokeWidth={1.7} />{!mini && <span>{label}</span>}</Link>; })}</div>;
+          if (mini || group === '工作空间') return <div className={cn('grid gap-0.5', !mini && 'mb-2')} key={group}>{items.map(({ href, label, icon: Icon }) => { const selected = activeHref === href; return <Link key={href} href={href} title={label} aria-current={selected ? 'page' : undefined} className={cn('flex h-10 items-center gap-3 rounded-lg px-2.5 text-[13px] text-[#555550] transition-colors hover:bg-[#ededeb]', selected && 'bg-[#e4e4e1] font-medium text-[#171714]', mini && 'justify-center px-0')} onClick={() => setMobile(false)}><Icon className="shrink-0 text-[#8f8f89]" size={18} strokeWidth={1.7} />{!mini && <span>{label}</span>}</Link>; })}</div>;
           const GroupIcon = groupIcons[group as keyof typeof groupIcons];
           const isOpen = openGroups.has(group);
           const groupId = `sidebar-group-${group}`;
           return <div className="mt-2" key={group}>
             <button type="button" className="flex h-10 w-full items-center gap-3 rounded-lg border-0 bg-transparent px-2.5 text-left text-[13px] font-medium text-[#555550] transition-colors hover:bg-[#ededeb]" aria-expanded={isOpen} aria-controls={groupId} onClick={() => toggleGroup(group)}><GroupIcon className="shrink-0 text-[#8f8f89]" size={18} strokeWidth={1.7}/><span>{group}</span><ChevronDown className={cn('ml-auto text-[#8f8f89] transition-transform', !isOpen && '-rotate-90')} size={14}/></button>
-            {isOpen && <div id={groupId} className="grid gap-0.5">{items.map(({ href, label }) => { const selected = pathname === href || pathname.startsWith(`${href}/`); return <Link key={href} href={href} title={label} aria-current={selected ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg pl-10 pr-3 text-[13px] text-[#555550] transition-colors hover:bg-[#ededeb] hover:text-[#171714]', selected && 'bg-[#e4e4e1] font-medium text-[#171714]')} onClick={() => setMobile(false)}>{label}</Link>; })}</div>}
+            {isOpen && <div id={groupId} className="grid gap-0.5">{items.map(({ href, label }) => { const selected = activeHref === href; return <Link key={href} href={href} title={label} aria-current={selected ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg pl-10 pr-3 text-[13px] text-[#555550] transition-colors hover:bg-[#ededeb] hover:text-[#171714]', selected && 'bg-[#e4e4e1] font-medium text-[#171714]')} onClick={() => setMobile(false)}>{label}</Link>; })}</div>}
           </div>;
         })}</nav>
       </div>

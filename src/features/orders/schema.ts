@@ -11,6 +11,7 @@ export const orderItemInputSchema = z.object({
 });
 export const orderInputSchema = z.object({
   workerId: z.string().min(1, '请选择油漆工'), projectId: z.string().nullable().default(null),
+  projectName: z.string().trim().max(80, '工地名称不能超过 80 个字符').nullable().default(null),
   occurredAt: z.string().min(1, '请选择业务日期'),
   items: z.array(orderItemInputSchema).min(1, '至少添加一种材料'),
   paymentAmount: moneySchema.default('0.00'), prepaidDeduction: moneySchema.default('0.00'),

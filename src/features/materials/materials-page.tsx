@@ -21,11 +21,11 @@ import { materialInputSchema, type Material, type MaterialInput } from './schema
 const selectClass='h-10 shrink-0 rounded-lg border border-black/15 bg-white px-3 text-xs text-[#52514e]';
 const fieldClass='grid grid-cols-2 gap-3 max-[600px]:grid-cols-1 [&_label>span]:mb-2 [&_label>span]:block [&_label>span]:text-xs [&_label>span]:text-[#66645f]';
 
-function MaterialForm({open,onOpenChange,value}:{open:boolean;onOpenChange:(value:boolean)=>void;value?:Material}) {
+export function MaterialForm({open,onOpenChange,value,onSuccess}:{open:boolean;onOpenChange:(value:boolean)=>void;value?:Material;onSuccess?:(value:Material)=>void}) {
   const client=useQueryClient();
   const form=useForm<MaterialInput>({resolver:zodResolver(materialInputSchema),defaultValues:{name:'',category:'',brand:'',specification:'',unit:'桶',defaultPrice:'',costPrice:'',status:'ACTIVE'}});
   useEffect(()=>{if(open)form.reset(value?{name:value.name,category:value.category,brand:value.brand,specification:value.specification,unit:value.unit,defaultPrice:value.defaultPrice,costPrice:value.costPrice,status:value.status,version:value.version}:{name:'',category:'',brand:'',specification:'',unit:'桶',defaultPrice:'',costPrice:'',status:'ACTIVE'});},[open,value,form]);
-  const mutation=useMutation({mutationFn:(input:MaterialInput)=>value?materialsApi.update(value.id,input):materialsApi.create(input),onSuccess:async()=>{await client.invalidateQueries({queryKey:['materials']});toast.success(value?'材料已更新':'材料已新增');onOpenChange(false);},onError:(error)=>form.setError('root',{message:errorMessage(error)})});
+  const mutation=useMutation({mutationFn:(input:MaterialInput)=>value?materialsApi.update(value.id,input):materialsApi.create(input),onSuccess:async(saved)=>{await client.invalidateQueries({queryKey:['materials']});toast.success(value?'材料已更新':'材料已新增');onOpenChange(false);onSuccess?.(saved);},onError:(error)=>form.setError('root',{message:errorMessage(error)})});
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="flex max-h-[calc(100svh-32px)] max-w-[680px] flex-col overflow-hidden p-0">
       <div className="shrink-0 px-[26px] pb-5 pt-[26px]">

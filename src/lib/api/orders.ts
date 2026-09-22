@@ -9,5 +9,6 @@ function query(params: ListParams = {}) {
 }
 export const ordersApi = {
   list: (params?: ListParams, signal?: AbortSignal) => api.request(`/orders${query(params)}`, orderPageSchema, { signal }),
+  get: (id: string, signal?: AbortSignal) => api.request(`/orders/${id}`, orderSchema, { signal }),
   create: (input: OrderInput, idempotencyKey: string) => api.request('/orders', orderSchema, { method: 'POST', body: input, idempotencyKey }),
 };

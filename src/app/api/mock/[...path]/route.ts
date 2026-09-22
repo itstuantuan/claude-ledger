@@ -11,7 +11,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
   const path = (await context.params).path;
   if (path[0] === 'auth') return handleMockAuth(request, path);
   if (path[0] === 'materials' || path[0] === 'pricing') return handleMockMaterials(request, path);
-  if (path[0] === 'orders') return handleMockOrders(request);
+  if (path[0] === 'orders') return handleMockOrders(request, path);
   if (path[0] === 'payments' || path[0] === 'prepaid' || path[0] === 'returns') return handleMockFinance(request, path[0]);
   if (path[0] === 'ledger' && path[1] === 'statement') return handleMockLedger(request);
   if (path[0] === 'dashboard' && path[1] === 'summary') return handleMockDashboard(request);

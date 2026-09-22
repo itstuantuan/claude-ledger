@@ -6,14 +6,16 @@ import { findMockMaterial } from './material-service';
 import { orderInputSchema, type Order, type OrderStatus } from '@/features/orders/schema';
 import { fromMinorUnits, toMinorUnits } from '@/lib/utils/money';
 
-let orders: Order[] = [];
-const submitted = new Map<string, Order>();
+type MockOrderState={orders:Order[];submitted:Map<string,Order>};
+const mockGlobal=globalThis as typeof globalThis&{__paintOrderState?:MockOrderState};
+const mockState=mockGlobal.__paintOrderState??={orders:[],submitted:new Map<string,Order>()};
+const {orders,submitted}=mockState;
 const storeDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' });
 export function listMockOrders(){return orders;}
 export function findMockOrder(id:string){return orders.find((item)=>item.id===id);}
 function dayKey(value:string){return storeDate.format(new Date(value));}
 
-function replaceOrder(next:Order){orders=orders.map((item)=>item.id===next.id?next:item);for(const [key,item] of submitted)if(item.id===next.id)submitted.set(key,next);return next;}
+function replaceOrder(next:Order){const index=orders.findIndex((item)=>item.id===next.id);if(index>=0)orders[index]=next;for(const [key,item] of submitted)if(item.id===next.id)submitted.set(key,next);return next;}
 function nextStatus(order:Order,outstanding:bigint,returned=toMinorUnits(order.returnedAmount)):OrderStatus {
   if(returned>=toMinorUnits(order.finalAmount))return 'REVERSED';
   if(outstanding===0n)return 'PAID';
@@ -49,10 +51,11 @@ function page<T>(items:T[],request:NextRequest) {
   return {items:items.slice((current-1)*size,current*size),page:current,pageSize:size,total:items.length};
 }
 
-export async function handleMockOrders(request:NextRequest) {
+export async function handleMockOrders(request:NextRequest,path:string[]=['orders']) {
   const user=authenticateMock(request);if(!user)return mockFail(401,'UNAUTHENTICATED','请先登录。');
   if(request.method==='GET') {
     if(!user.permissions.includes('workers:read'))return mockFail(403,'FORBIDDEN','你没有查看用料记录的权限。');
+    if(path[1]){const order=findMockOrder(path[1]);return order?NextResponse.json(order):mockFail(404,'ORDER_NOT_FOUND','用料单不存在。');}
     const search=(request.nextUrl.searchParams.get('search')||'').toLowerCase();
     const workerId=request.nextUrl.searchParams.get('workerId');
     const status=request.nextUrl.searchParams.get('status') as OrderStatus|null;
@@ -91,7 +94,7 @@ export async function handleMockOrders(request:NextRequest) {
   const debt=finalAmount-payment-prepaid;
   const now=new Date();const serial=String(orders.length+1).padStart(4,'0');
   const occurredAt=new Date(parsed.data.occurredAt).toISOString();
-  const order:Order={id:`o-${randomUUID()}`,orderNo:`YL${now.toISOString().slice(0,10).replaceAll('-','')}${serial}`,workerId:worker.id,workerName:worker.name,projectId:project?.id||null,projectName:project?.name||null,items,goodsAmount:fromMinorUnits(goods),discountAmount:fromMinorUnits(discount),finalAmount:fromMinorUnits(finalAmount),paymentAmount:fromMinorUnits(payment),prepaidDeduction:fromMinorUnits(prepaid),addedReceivable:fromMinorUnits(debt),returnedAmount:'0.00',settledAmount:fromMinorUnits(payment+prepaid),outstandingAmount:fromMinorUnits(debt),paymentMethod:parsed.data.paymentMethod,status:debt===0n?'PAID':payment+prepaid>0n?'PARTIALLY_PAID':'CONFIRMED',note:parsed.data.note,occurredAt,createdAt:now.toISOString(),operatorName:user.name};
-  orders=[order,...orders];submitted.set(key,order);updateMockWorkerFinancials(worker.id,{materialTotal:finalAmount,paymentTotal:payment,prepaidBalance:-prepaid,receivable:debt,occurredAt});
+  const order:Order={id:`o-${randomUUID()}`,orderNo:`YL${now.toISOString().slice(0,10).replaceAll('-','')}${serial}`,workerId:worker.id,workerName:worker.name,projectId:project?.id||null,projectName:project?.name||parsed.data.projectName||null,items,goodsAmount:fromMinorUnits(goods),discountAmount:fromMinorUnits(discount),finalAmount:fromMinorUnits(finalAmount),paymentAmount:fromMinorUnits(payment),prepaidDeduction:fromMinorUnits(prepaid),addedReceivable:fromMinorUnits(debt),returnedAmount:'0.00',settledAmount:fromMinorUnits(payment+prepaid),outstandingAmount:fromMinorUnits(debt),paymentMethod:parsed.data.paymentMethod,status:debt===0n?'PAID':payment+prepaid>0n?'PARTIALLY_PAID':'CONFIRMED',note:parsed.data.note,occurredAt,createdAt:now.toISOString(),operatorName:user.name};
+  orders.unshift(order);submitted.set(key,order);updateMockWorkerFinancials(worker.id,{materialTotal:finalAmount,paymentTotal:payment,prepaidBalance:-prepaid,receivable:debt,occurredAt});
   return NextResponse.json(order,{status:201});
 }
