@@ -4,6 +4,7 @@ out/
 *.tsbuildinfo
 .env*
 !.env.example
+!.env.docker.example
 *.log
 
 .npm-cache/

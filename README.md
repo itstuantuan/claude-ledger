@@ -52,6 +52,30 @@ npm run start -- --port 3001
 
 真实模式不静默回退到 mock。前端 Guard 和 PermissionGate 只控制界面，服务端必须逐请求验证权限、令牌和账号状态。mock 使用进程内会话，服务重启后会话失效，不具备正式身份系统的密码存储、持久会话或登录限流。
 
+## Docker 部署
+
+项目使用 Next.js standalone 输出和多阶段构建，生产镜像只包含运行所需文件，并以非 root 用户启动。先复制 Docker 配置并填写浏览器可访问的 Go API 地址：
+
+```bash
+cp .env.docker.example .env
+```
+
+然后构建并启动：
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+默认访问 http://localhost:3000 。如需查看日志或停止服务：
+
+```bash
+docker compose logs -f frontend
+docker compose down
+```
+
+`NEXT_PUBLIC_API_MODE` 和 `NEXT_PUBLIC_API_BASE_URL` 会在镜像构建时固化，修改后必须再次执行 `docker compose up -d --build`。这里的 API 地址由用户浏览器访问，不应填写仅在 Docker 网络内可解析的服务名；跨域部署时，Go 后端还需允许前端站点的 Origin 和凭据。正式部署不要启用 `ALLOW_LOCAL_MOCK_BUILD`。
+
 ## 验证
 
 ```bash
