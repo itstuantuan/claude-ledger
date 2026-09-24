@@ -103,3 +103,11 @@ Repository implementations -> GORM/PostgreSQL
 ## 7. 明确不做
 
 Phase 1 不实现业务 CRUD、认证、Ledger、Redis、消息队列、CQRS、微服务、Kubernetes，也不删除任何 Mock。遵循逐模块“后端测试通过 → 前端切换 → 前端测试通过 → 删除该模块 Mock”。
+
+## 8. 当前实施状态
+
+- Phase 1 已完成：独立 Go 项目、平台基础、Migration、Docker、Health 与测试。
+- Phase 2 已完成代码与单元/HTTP 契约测试：Store/User/Role/Permission Schema、bcrypt、JWT、数据库 Refresh Session 轮换与撤销、Auth API 和实时 RBAC。
+- Phase 3 已完成代码与单元测试：Worker、Team、Project、Material、CustomerPrice API，包含 store scope、乐观锁、批量成员查询、价格历史化与平衡 Seed 基础资料。
+- Phase 4 已完成代码与纯账务测试：快速开单、OrderItem 历史快照、业务编号、请求哈希幂等、三条应收流水、订单即时付款、预存抵扣、真实资金流水、审计日志及汇总/流水一致性阻断。真实 PostgreSQL 并发测试仍受本机数据库环境限制。
+- 当前机器 Docker daemon 不可用，Phase 1–2 Migration 的真实 PostgreSQL `up/down/up` 与前端 real-mode 登录联调仍待执行；在完成该集成门禁前不删除 Auth Mock。

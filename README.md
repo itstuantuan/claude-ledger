@@ -1,6 +1,6 @@
 # 云记账 · 油漆门店经营管理
 
-在原有暖白、灰绿界面的基础上分阶段开发。目前已完成 Phase 1–7：布局与认证、客户与工地、材料与客户价、用料单、收款/预存/退料、往来账与客户对账、工作台经营统计。本版本仍为本地合同 mock，不能用于真实经营记账。
+在原有暖白、灰绿界面的基础上分阶段开发。目前已完成 Phase 1–7：布局与认证、客户与工地、材料与客户价、用料单、收款/预存/退料、往来账与客户对账、工作台经营统计。前端同时支持本地合同 mock 和独立 Go API；Go 后端当前已接通认证、基础资料与快速开单，尚未接通的页面会收到明确的 404，不会静默回退到 mock。
 
 ## 本地启动
 
@@ -86,6 +86,19 @@ npm run typecheck
 ```
 
 路由变化时可先运行 `npx next typegen` 刷新生成类型。测试覆盖并发刷新、刷新失败、过期退出、幂等键保留、取消请求、各类错误、字段映射、Decimal 格式化与权限基础。
+
+## 测试服务器镜像
+
+`NEXT_PUBLIC_API_BASE_URL` 会写入浏览器端产物，必须在构建镜像时传入。推荐让前端和 API 位于同一站点，由反向代理把 `/api/` 转发给 Go 服务：
+
+```bash
+docker build \
+  --build-arg NEXT_PUBLIC_API_BASE_URL=https://ledger-test.example.com/api/v1 \
+  -t claude-ledger-web:test .
+docker run --rm -p 3000:3000 claude-ledger-web:test
+```
+
+测试环境部署与验收步骤见后端平级项目 `../claude-ledger-backend/docs/test-deployment.md`。
 
 ## 原代码与数据
 

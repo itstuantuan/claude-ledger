@@ -43,9 +43,11 @@
 ### Auth
 
 - Login request：`account` 1–80；`password` 1–128，密码不 trim。
+- 现有前端没有 store selector；因此 V1 的 account 在全系统唯一。未来若允许不同门店重复账号，必须先给登录 Contract 增加门店标识或租户域名。
 - Session：`{accessToken,expiresIn,user}`。
 - User：`{id,name,account,role,permissions,status}`，枚举必须与前端一致。
 - Refresh token 轮换；数据库只保存 hash。用户停用/权限变更后 refresh 返回 403。
+- Refresh token 按会话族轮换；退出撤销整族，已轮换旧 token 被重放时也撤销该族的活动 token。
 
 ### Worker
 
