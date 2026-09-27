@@ -3,13 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateMock, mockFail } from './auth-service';
 import { findMockProject, findMockWorker, updateMockWorkerFinancials } from './customer-service';
 import { findMockMaterial } from './material-service';
-import { orderInputSchema, type Order, type OrderStatus } from '@/features/orders/schema';
+import { orderAdjustmentInputSchema, orderInputSchema, type Order, type OrderAdjustment, type OrderStatus } from '@/features/orders/schema';
 import { fromMinorUnits, toMinorUnits } from '@/lib/utils/money';
 
-type MockOrderState={orders:Order[];submitted:Map<string,Order>};
+type MockOrderState={orders:Order[];submitted:Map<string,Order>;adjustments:Record<string,OrderAdjustment[]>;submittedAdjustments:Map<string,OrderAdjustment>};
 const mockGlobal=globalThis as typeof globalThis&{__paintOrderState?:MockOrderState};
-const mockState=mockGlobal.__paintOrderState??={orders:[],submitted:new Map<string,Order>()};
-const {orders,submitted}=mockState;
+const mockState=mockGlobal.__paintOrderState??={orders:[],submitted:new Map<string,Order>(),adjustments:{},submittedAdjustments:new Map<string,OrderAdjustment>()};
+mockState.adjustments??={};mockState.submittedAdjustments??=new Map<string,OrderAdjustment>();
+const {orders,submitted,adjustments,submittedAdjustments}=mockState;
 const storeDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' });
 export function listMockOrders(){return orders;}
 export function findMockOrder(id:string){return orders.find((item)=>item.id===id);}
@@ -55,7 +56,7 @@ export async function handleMockOrders(request:NextRequest,path:string[]=['order
   const user=authenticateMock(request);if(!user)return mockFail(401,'UNAUTHENTICATED','请先登录。');
   if(request.method==='GET') {
     if(!user.permissions.includes('workers:read'))return mockFail(403,'FORBIDDEN','你没有查看用料记录的权限。');
-    if(path[1]){const order=findMockOrder(path[1]);return order?NextResponse.json(order):mockFail(404,'ORDER_NOT_FOUND','用料单不存在。');}
+    if(path[1]){const order=findMockOrder(path[1]);if(!order)return mockFail(404,'ORDER_NOT_FOUND','用料单不存在。');if(path[2]==='adjustments')return NextResponse.json(adjustments[order.id]||[]);return NextResponse.json(order);}
     const search=(request.nextUrl.searchParams.get('search')||'').toLowerCase();
     const workerId=request.nextUrl.searchParams.get('workerId');
     const status=request.nextUrl.searchParams.get('status') as OrderStatus|null;
@@ -73,6 +74,19 @@ export async function handleMockOrders(request:NextRequest,path:string[]=['order
   if(!user.permissions.includes('orders:create'))return mockFail(403,'FORBIDDEN','你没有创建用料单的权限。');
   const key=request.headers.get('idempotency-key');
   if(!key)return mockFail(422,'IDEMPOTENCY_REQUIRED','缺少防重复提交标识。');
+  if(path[1]&&path[2]==='adjustments'){
+    const order=findMockOrder(path[1]);if(!order)return mockFail(404,'ORDER_NOT_FOUND','用料单不存在。');
+    const replay=submittedAdjustments.get(key);if(replay)return NextResponse.json(replay);
+    const parsed=orderAdjustmentInputSchema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return mockFail(422,'VALIDATION_ERROR','请检查调整内容。',parsed.error.flatten().fieldErrors);
+    if(parsed.data.expectedVersion!==order.version)return mockFail(409,'ORDER_VERSION_CONFLICT','用料单已被其他人修改，请刷新后重试。');
+    let total=0n;const lines=[];const nextItems=[...order.items];
+    for(const input of parsed.data.items){const material=findMockMaterial(input.materialId);if(!material)return mockFail(422,'MATERIAL_UNAVAILABLE','材料不存在。');const index=nextItems.findIndex(item=>item.materialId===input.materialId);const quantity=quantityMilli(input.quantity);
+      if(parsed.data.type==='SUPPLEMENT'){const subtotal=lineSubtotal(input.unitPrice,input.quantity,input.discount);total+=subtotal;if(index<0)nextItems.push({materialId:material.id,materialName:material.name,specification:material.specification,unit:material.unit,quantity:input.quantity,unitPrice:input.unitPrice,discount:input.discount,subtotal:fromMinorUnits(subtotal)});else{const row=nextItems[index];const oldQuantity=quantityMilli(row.quantity);const nextQuantity=oldQuantity+quantity;const nextSubtotal=toMinorUnits(row.subtotal)+subtotal;nextItems[index]={...row,quantity:`${nextQuantity/1000n}${nextQuantity%1000n?`.${String(nextQuantity%1000n).padStart(3,'0').replace(/0+$/,'')}`:''}`,unitPrice:fromMinorUnits((nextSubtotal*1000n+nextQuantity/2n)/nextQuantity),subtotal:fromMinorUnits(nextSubtotal)};}lines.push({materialId:material.id,materialName:material.name,specification:material.specification,unit:material.unit,quantity:input.quantity,unitPrice:input.unitPrice,discount:input.discount,subtotal:fromMinorUnits(subtotal)});
+      }else{if(index<0||quantity>quantityMilli(nextItems[index].quantity))return mockFail(422,'RETURN_QUANTITY_EXCEEDED','退料数量超过当前可退数量。');const row=nextItems[index];const currentQuantity=quantityMilli(row.quantity);const subtotal=(toMinorUnits(row.subtotal)*quantity+currentQuantity/2n)/currentQuantity;if(subtotal>toMinorUnits(order.outstandingAmount))return mockFail(422,'RETURN_EXCEEDS_OUTSTANDING','退料金额超过当前未结金额。');total+=subtotal;const remaining=currentQuantity-quantity;if(remaining===0n)nextItems.splice(index,1);else nextItems[index]={...row,quantity:`${remaining/1000n}${remaining%1000n?`.${String(remaining%1000n).padStart(3,'0').replace(/0+$/,'')}`:''}`,subtotal:fromMinorUnits(toMinorUnits(row.subtotal)-subtotal)};lines.push({...row,quantity:input.quantity,subtotal:fromMinorUnits(subtotal)});}
+    }
+    const now=new Date();const list=adjustments[order.id]||[];const item:OrderAdjustment={id:`oa-${randomUUID()}`,adjustmentNo:`${parsed.data.type==='SUPPLEMENT'?'BL':'TL'}${now.toISOString().slice(0,10).replaceAll('-','')}${String(list.length+1).padStart(4,'0')}`,type:parsed.data.type,items:lines,goodsAmount:fromMinorUnits(total),discountAmount:'0.00',finalAmount:fromMinorUnits(total),note:parsed.data.note,occurredAt:new Date(parsed.data.occurredAt).toISOString(),createdAt:now.toISOString(),operatorName:user.name};
+    const delta=parsed.data.type==='SUPPLEMENT'?total:-total;const outstanding=toMinorUnits(order.outstandingAmount)+delta;replaceOrder({...order,items:nextItems,finalAmount:parsed.data.type==='SUPPLEMENT'?fromMinorUnits(toMinorUnits(order.finalAmount)+total):order.finalAmount,returnedAmount:parsed.data.type==='RETURN'?fromMinorUnits(toMinorUnits(order.returnedAmount)+total):order.returnedAmount,addedReceivable:fromMinorUnits(toMinorUnits(order.addedReceivable)+delta),outstandingAmount:fromMinorUnits(outstanding),status:nextStatus(order,outstanding),version:order.version+1});adjustments[order.id]=[...list,item];submittedAdjustments.set(key,item);updateMockWorkerFinancials(order.workerId,parsed.data.type==='SUPPLEMENT'?{materialTotal:total,receivable:total,occurredAt:item.occurredAt}:{returnTotal:total,receivable:-total,occurredAt:item.occurredAt});return NextResponse.json(item,{status:201});
+  }
   const previous=submitted.get(key);if(previous)return NextResponse.json(previous);
   const parsed=orderInputSchema.safeParse(await request.json().catch(()=>null));
   if(!parsed.success)return mockFail(422,'VALIDATION_ERROR','请检查用料单内容。',parsed.error.flatten().fieldErrors);
@@ -94,7 +108,7 @@ export async function handleMockOrders(request:NextRequest,path:string[]=['order
   const debt=finalAmount-payment-prepaid;
   const now=new Date();const serial=String(orders.length+1).padStart(4,'0');
   const occurredAt=new Date(parsed.data.occurredAt).toISOString();
-  const order:Order={id:`o-${randomUUID()}`,orderNo:`YL${now.toISOString().slice(0,10).replaceAll('-','')}${serial}`,workerId:worker.id,workerName:worker.name,projectId:project?.id||null,projectName:project?.name||parsed.data.projectName||null,items,goodsAmount:fromMinorUnits(goods),discountAmount:fromMinorUnits(discount),finalAmount:fromMinorUnits(finalAmount),paymentAmount:fromMinorUnits(payment),prepaidDeduction:fromMinorUnits(prepaid),addedReceivable:fromMinorUnits(debt),returnedAmount:'0.00',settledAmount:fromMinorUnits(payment+prepaid),outstandingAmount:fromMinorUnits(debt),paymentMethod:parsed.data.paymentMethod,status:debt===0n?'PAID':payment+prepaid>0n?'PARTIALLY_PAID':'CONFIRMED',note:parsed.data.note,occurredAt,createdAt:now.toISOString(),operatorName:user.name};
+  const order:Order={id:`o-${randomUUID()}`,orderNo:`YL${now.toISOString().slice(0,10).replaceAll('-','')}${serial}`,workerId:worker.id,workerName:worker.name,projectId:project?.id||null,projectName:project?.name||parsed.data.projectName||null,items,goodsAmount:fromMinorUnits(goods),discountAmount:fromMinorUnits(discount),finalAmount:fromMinorUnits(finalAmount),paymentAmount:fromMinorUnits(payment),prepaidDeduction:fromMinorUnits(prepaid),addedReceivable:fromMinorUnits(debt),returnedAmount:'0.00',settledAmount:fromMinorUnits(payment+prepaid),outstandingAmount:fromMinorUnits(debt),paymentMethod:parsed.data.paymentMethod,status:debt===0n?'PAID':payment+prepaid>0n?'PARTIALLY_PAID':'CONFIRMED',note:parsed.data.note,occurredAt,createdAt:now.toISOString(),operatorName:user.name,version:1};
   orders.unshift(order);submitted.set(key,order);updateMockWorkerFinancials(worker.id,{materialTotal:finalAmount,paymentTotal:payment,prepaidBalance:-prepaid,receivable:debt,occurredAt});
   return NextResponse.json(order,{status:201});
 }

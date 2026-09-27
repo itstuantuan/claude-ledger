@@ -1,5 +1,5 @@
 import { api } from './auth';
-import { orderPageSchema, orderSchema, type OrderInput } from '@/features/orders/schema';
+import { orderAdjustmentListSchema, orderAdjustmentSchema, orderPageSchema, orderSchema, type OrderAdjustmentInput, type OrderInput } from '@/features/orders/schema';
 import type { ListParams } from './customers';
 
 function query(params: ListParams = {}) {
@@ -14,5 +14,9 @@ export const ordersApi = {
     method: 'POST',
     body: { ...input, occurredAt: new Date(input.occurredAt).toISOString() },
     idempotencyKey,
+  }),
+  listAdjustments: (id: string, signal?: AbortSignal) => api.request(`/orders/${id}/adjustments`, orderAdjustmentListSchema, { signal }),
+  adjust: (id: string, input: OrderAdjustmentInput, idempotencyKey: string) => api.request(`/orders/${id}/adjustments`, orderAdjustmentSchema, {
+    method: 'POST', body: { ...input, occurredAt: new Date(input.occurredAt).toISOString() }, idempotencyKey,
   }),
 };

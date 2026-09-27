@@ -30,11 +30,26 @@ export const orderSchema = z.object({
   paymentAmount: z.string(), prepaidDeduction: z.string(), addedReceivable: z.string(),
   returnedAmount: z.string(), settledAmount: z.string(), outstandingAmount: z.string(),
   paymentMethod: paymentMethodSchema.nullable(), status: orderStatusSchema, note: z.string(),
-  occurredAt: z.string(), createdAt: z.string(), operatorName: z.string(),
+  occurredAt: z.string(), createdAt: z.string(), operatorName: z.string(), version: z.number().int().positive(),
 });
+export const orderAdjustmentTypeSchema = z.enum(['SUPPLEMENT', 'RETURN']);
+export const orderAdjustmentInputSchema = z.object({
+  type: orderAdjustmentTypeSchema, occurredAt: z.string().min(1, '请选择业务日期'),
+  items: z.array(orderItemInputSchema).min(1, '至少添加一种材料'),
+  note: z.string().trim().max(200).default(''), expectedVersion: z.number().int().positive(),
+});
+export const orderAdjustmentSchema = z.object({
+  id: z.string(), adjustmentNo: z.string(), type: orderAdjustmentTypeSchema,
+  items: z.array(orderItemSchema), goodsAmount: z.string(), discountAmount: z.string(), finalAmount: z.string(),
+  note: z.string(), occurredAt: z.string(), createdAt: z.string(), operatorName: z.string(),
+});
+export const orderAdjustmentListSchema = z.array(orderAdjustmentSchema);
 export const orderPageSchema = pageMetaSchema.extend({ items: z.array(orderSchema) });
 
 export type Order = z.infer<typeof orderSchema>;
 export type OrderInput = z.input<typeof orderInputSchema>;
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
+export type OrderAdjustment = z.infer<typeof orderAdjustmentSchema>;
+export type OrderAdjustmentInput = z.input<typeof orderAdjustmentInputSchema>;
+export type OrderAdjustmentType = z.infer<typeof orderAdjustmentTypeSchema>;
