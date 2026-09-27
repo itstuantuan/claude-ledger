@@ -74,7 +74,7 @@ docker compose logs -f frontend
 docker compose down
 ```
 
-`NEXT_PUBLIC_API_MODE` 和 `NEXT_PUBLIC_API_BASE_URL` 会在镜像构建时固化，修改后必须再次执行 `docker compose up -d --build`。这里的 API 地址由用户浏览器访问，不应填写仅在 Docker 网络内可解析的服务名；跨域部署时，Go 后端还需允许前端站点的 Origin 和凭据。正式部署不要启用 `ALLOW_LOCAL_MOCK_BUILD`。
+`NEXT_PUBLIC_API_MODE` 和 `NEXT_PUBLIC_API_BASE_URL` 会在镜像构建时固化，修改后必须再次执行 `docker compose up -d --build`。这里的 API 地址由用户浏览器访问，不应填写仅在 Docker 网络内可解析的服务名；同站 Nginx 转发 `/api/` 时可填写相对地址 `/api/v1`，这样切换 HTTP/HTTPS 无需重新构建前端。跨域部署时，Go 后端还需允许前端站点的 Origin 和凭据。正式部署不要启用 `ALLOW_LOCAL_MOCK_BUILD`。
 
 ## 验证
 
