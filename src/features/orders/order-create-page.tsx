@@ -16,6 +16,7 @@ import { materialsApi, pricingApi } from '@/lib/api/materials';
 import { ordersApi } from '@/lib/api/orders';
 import { errorMessage } from '@/lib/api/errors';
 import { formatMoney, fromMinorUnits, toMinorUnits } from '@/lib/utils/money';
+import { createIdempotencyKey } from '@/lib/utils/idempotency-key';
 import { WorkerForm } from '@/features/customers/forms';
 import { MaterialForm } from '@/features/materials/materials-page';
 import type { Worker } from '@/features/customers/schema';
@@ -62,7 +63,7 @@ export function OrderCreatePage(){
   const add=(material:Material)=>{const index=form.getValues('items').findIndex(x=>x.materialId===material.id);if(index>=0){form.setValue(`items.${index}.quantity`,numberText((Number(form.getValues(`items.${index}.quantity`))||0)+1),{shouldDirty:true,shouldValidate:true});flash(material.id);}else{setPicked(x=>({...x,[material.id]:material}));fields.append({materialId:material.id,quantity:'1',unitPrice:price(material),discount:'0.00'},{shouldFocus:false});flash(material.id);}setMaterialSearch('');setMaterialOpen(true);setMaterialCursor(0);requestAnimationFrame(()=>materialRef.current?.focus());};
   const copyPrevious=()=>{if(!lastOrder)return;const active=materials.data?.items||[];const next=lastOrder.items.filter(item=>active.some(x=>x.id===item.materialId)).map(item=>{const material=active.find(x=>x.id===item.materialId)!;return {materialId:item.materialId,quantity:item.quantity,unitPrice:price(material),discount:'0.00'};});fields.replace(next);setPicked(Object.fromEntries(active.filter(x=>next.some(row=>row.materialId===x.id)).map(x=>[x.id,x])));toast.success('已复制上一单，可直接调整数量');};
   const choosePayment=(value:'ACCOUNT'|PaymentMethod)=>{setPaymentMode(value);form.setValue('paymentMethod',value==='ACCOUNT'?null:value);form.setValue('paymentAmount',value==='ACCOUNT'?'0.00':fromMinorUnits(totals.final));};
-  const submit=useMutation({mutationFn:(input:OrderInput)=>ordersApi.create(input,crypto.randomUUID()),onSuccess:order=>{setCreated(order);toast.success(`用料单 ${order.orderNo} 已创建`);},onError:error=>toast.error(errorMessage(error))});
+  const submit=useMutation({mutationFn:(input:OrderInput)=>ordersApi.create(input,createIdempotencyKey()),onSuccess:order=>{setCreated(order);toast.success(`用料单 ${order.orderNo} 已创建`);},onError:error=>toast.error(errorMessage(error))});
   const confirm=()=>{void form.handleSubmit(input=>submit.mutate(input),errors=>toast.error(errors.workerId?.message||errors.items?.message||'请检查开单信息'))();};
   useEffect(()=>{const handler=(event:BeforeUnloadEvent)=>{if(items.length&&!created){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[items.length,created]);
   useEffect(()=>{const handler=(event:KeyboardEvent)=>{const tag=(event.target as HTMLElement).tagName;if(event.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(tag)){event.preventDefault();materialRef.current?.focus();}if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();confirm();}};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);});

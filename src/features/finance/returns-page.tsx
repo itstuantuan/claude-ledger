@@ -15,6 +15,7 @@ import { returnsApi } from '@/lib/api/finance';
 import { ordersApi } from '@/lib/api/orders';
 import { errorMessage } from '@/lib/api/errors';
 import { formatMoney } from '@/lib/utils/money';
+import { createIdempotencyKey } from '@/lib/utils/idempotency-key';
 import type { ReturnInput } from './schema';
 
 const fieldClass='grid gap-4 [&_label>span]:mb-2 [&_label>span]:block [&_label>span]:text-xs [&_label>span]:text-[#66645f]';
@@ -35,7 +36,7 @@ export function ReturnsPage(){
   const order=orders.data?.items.find((item)=>item.id===orderId);
   const resetForm=()=>{setOrderId('');setOccurredAt(localToday());setQuantities({});setNote('');};
   const mutation=useMutation({
-    mutationFn:(input:ReturnInput)=>returnsApi.create(input,crypto.randomUUID()),
+    mutationFn:(input:ReturnInput)=>returnsApi.create(input,createIdempotencyKey()),
     onSuccess:async(item)=>{toast.success(item.status==='PENDING'?'退料申请已提交':'退料已确认');setOpen(false);resetForm();await Promise.all([client.invalidateQueries({queryKey:['returns']}),client.invalidateQueries({queryKey:['workers']}),client.invalidateQueries({queryKey:['orders']})]);},
     onError:(error)=>toast.error(errorMessage(error)),
   });
