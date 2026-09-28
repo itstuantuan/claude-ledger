@@ -20,11 +20,12 @@ export const materialInputSchema = z.object({
 export const pricingItemSchema = z.object({
   materialId: z.string(), materialName: z.string(), brand: z.string(), specification: z.string(), unit: z.string(),
   defaultPrice: z.string(), customerPrice: z.string().nullable(), effectivePrice: z.string(),
+  priceVersion: z.number().int().nullable(), effectiveFrom: z.string().nullable(),
 });
 export const pricingListSchema = z.array(pricingItemSchema);
 export const pricingBatchInputSchema = z.object({
   workerId: z.string().min(1), prices: z.array(z.object({
-    materialId: z.string(), price: z.string().regex(/^\d+(?:\.\d{1,2})?$/).nullable(),
+    materialId: z.string(), price: z.string().regex(/^\d+(?:\.\d{1,2})?$/).nullable(), expectedVersion: z.number().int().nullable(),
   })),
 });
 

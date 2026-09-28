@@ -18,6 +18,8 @@ let materials: Material[] = [
 
 const prices = new Map<string, Map<string, string>>();
 prices.set('w-1', new Map([['m-1','495.00'],['m-3','270.00'],['m-7','44.00']]));
+const priceVersions = new Map<string, Map<string, number>>();
+priceVersions.set('w-1', new Map([['m-1',1],['m-3',1],['m-7',1]]));
 
 export function findMockMaterial(id:string){return materials.find((item)=>item.id===id);}
 export function getMockMaterialPrice(workerId:string,materialId:string){return prices.get(workerId)?.get(materialId)||findMockMaterial(materialId)?.defaultPrice;}
@@ -58,13 +60,15 @@ export async function handleMockMaterials(request:NextRequest,path:string[]) {
     if(request.method==='GET') {
       if(!workerId)return mockFail(422,'WORKER_REQUIRED','请选择油漆工。');
       const own=prices.get(workerId);
-      return NextResponse.json(materials.filter(x=>x.status==='ACTIVE').map(x=>({materialId:x.id,materialName:x.name,brand:x.brand,specification:x.specification,unit:x.unit,defaultPrice:x.defaultPrice,customerPrice:own?.get(x.id)||null,effectivePrice:own?.get(x.id)||x.defaultPrice})));
+      const versions=priceVersions.get(workerId);const search=(request.nextUrl.searchParams.get('search')||'').toLowerCase();
+      return NextResponse.json(materials.filter(x=>x.status==='ACTIVE'&&(!search||`${x.name}${x.brand}${x.specification}`.toLowerCase().includes(search))).map(x=>({materialId:x.id,materialName:x.name,brand:x.brand,specification:x.specification,unit:x.unit,defaultPrice:x.defaultPrice,customerPrice:own?.get(x.id)||null,effectivePrice:own?.get(x.id)||x.defaultPrice,priceVersion:versions?.get(x.id)||null,effectiveFrom:own?.has(x.id)?new Date().toISOString():null})));
     }
     const parsed=pricingBatchInputSchema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return failValidation(parsed.error);
     const own=prices.get(parsed.data.workerId)||new Map<string,string>();
-    for(const item of parsed.data.prices){if(item.price===null)own.delete(item.materialId);else own.set(item.materialId,item.price);}
-    prices.set(parsed.data.workerId,own);
-    return NextResponse.json(materials.filter(x=>x.status==='ACTIVE').map(x=>({materialId:x.id,materialName:x.name,brand:x.brand,specification:x.specification,unit:x.unit,defaultPrice:x.defaultPrice,customerPrice:own.get(x.id)||null,effectivePrice:own.get(x.id)||x.defaultPrice})));
+    const versions=priceVersions.get(parsed.data.workerId)||new Map<string,number>();
+    for(const item of parsed.data.prices){const current=versions.get(item.materialId)||null;if(item.expectedVersion!==current)return mockFail(409,'PRICE_VERSION_CONFLICT','客户价格已被其他人修改，请刷新后重试。');if(item.price===null){own.delete(item.materialId);versions.delete(item.materialId);}else{own.set(item.materialId,item.price);versions.set(item.materialId,(current||0)+1);}}
+    prices.set(parsed.data.workerId,own);priceVersions.set(parsed.data.workerId,versions);
+    return NextResponse.json(materials.filter(x=>x.status==='ACTIVE').map(x=>({materialId:x.id,materialName:x.name,brand:x.brand,specification:x.specification,unit:x.unit,defaultPrice:x.defaultPrice,customerPrice:own.get(x.id)||null,effectivePrice:own.get(x.id)||x.defaultPrice,priceVersion:versions.get(x.id)||null,effectiveFrom:own.has(x.id)?new Date().toISOString():null})));
   }
   return mockFail(404,'NOT_FOUND','接口不存在。');
 }

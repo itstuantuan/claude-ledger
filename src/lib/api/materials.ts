@@ -14,6 +14,6 @@ export const materialsApi = {
   update: (id: string, input: MaterialInput) => api.request(`/materials/${id}`, materialSchema, { method: 'PATCH', body: input }),
 };
 export const pricingApi = {
-  list: (workerId: string, signal?: AbortSignal) => api.request(`/pricing?workerId=${encodeURIComponent(workerId)}`, pricingListSchema, { signal }),
-  save: (input: PricingBatchInput) => api.request('/pricing', pricingListSchema, { method: 'PATCH', body: input }),
+  list: (workerId: string, options: { at?: string; search?: string } = {}, signal?: AbortSignal) => api.request(`/pricing${query({ workerId, ...options })}`, pricingListSchema, { signal }),
+  save: (input: PricingBatchInput, idempotencyKey: string) => api.request('/pricing', pricingListSchema, { method: 'PATCH', body: input, idempotencyKey }),
 };

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, History, PackagePlus, Printer, RotateCcw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,7 +15,7 @@ import { materialsApi, pricingApi } from '@/lib/api/materials';
 import { errorMessage } from '@/lib/api/errors';
 import { createIdempotencyKey } from '@/lib/utils/idempotency-key';
 import { formatMoney, fromMinorUnits, toMinorUnits } from '@/lib/utils/money';
-import { formatStoreDateTime, storeDateTimeInput } from '@/lib/utils/datetime';
+import { formatStoreDateTime, storeDateTimeInput, toApiDateTime } from '@/lib/utils/datetime';
 import type { Material } from '@/features/materials/schema';
 import type { Order, OrderAdjustmentType, OrderStatus, PaymentMethod } from './schema';
 
@@ -38,7 +38,11 @@ export function OrderDetailPage({id}:{id:string}){
   const [supplements,setSupplements]=useState<Record<string,SupplementLine>>({});
   const [returns,setReturns]=useState<Record<string,string>>({});
   const materials=useQuery({queryKey:['materials','adjustment-options'],queryFn:({signal})=>materialsApi.list({pageSize:100,status:'ACTIVE'},signal),enabled:mode==='SUPPLEMENT'});
-  const pricing=useQuery({queryKey:['pricing',query.data?.workerId,'adjustment'],queryFn:({signal})=>pricingApi.list(query.data!.workerId,signal),enabled:mode==='SUPPLEMENT'&&!!query.data?.workerId});
+  const validPricingTime=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(occurredAt);
+  const pricingAt=validPricingTime?toApiDateTime(occurredAt):'';
+  const pricing=useQuery({queryKey:['pricing',query.data?.workerId,'adjustment',pricingAt],queryFn:({signal})=>pricingApi.list(query.data!.workerId,{at:pricingAt},signal),enabled:mode==='SUPPLEMENT'&&!!query.data?.workerId&&validPricingTime});
+  const previousEffectivePrices=useRef<Record<string,string>>({});
+  useEffect(()=>{if(!pricing.data)return;const next=Object.fromEntries(pricing.data.map(item=>[item.materialId,item.effectivePrice]));setSupplements(current=>Object.fromEntries(Object.entries(current).map(([materialId,line])=>{const fallback=materials.data?.items.find(item=>item.id===materialId)?.defaultPrice;const previous=previousEffectivePrices.current[materialId]??fallback;return [materialId,previous&&line.unitPrice===previous&&next[materialId]?{...line,unitPrice:next[materialId]}:line];})));previousEffectivePrices.current=next;},[pricing.data,materials.data]);
   const reset=()=>{setMode(undefined);setOccurredAt(localNow());setNote('');setSelectedMaterial('');setSupplements({});setReturns({});};
   const mutation=useMutation({
     mutationFn:()=>{const order=query.data!;const items=mode==='SUPPLEMENT'
