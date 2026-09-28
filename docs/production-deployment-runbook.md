@@ -1,428 +1,269 @@
-# 云记账生产部署手册
+# 云记账生产部署手册（前后端 ACR 镜像发布）
 
-本文档用于把“订单补料/退料 + 独立收款指定订单核销”版本部署到当前生产服务器 `47.94.95.143`。
+适用于已有生产环境的版本更新：**代码更新 → ACR 构建并推送成功 → 服务器拉取镜像 → 必要的数据库迁移 → 更新后端 → 更新前端 → 验收**。
 
-本次目标版本：
+服务器不承担镜像构建。前后端均禁止执行 `docker compose up -d --build`，也不要在服务器执行 `docker compose build` 或 `docker build`。ACR 构建失败或镜像拉取失败时，停止本次发布，保留现有容器运行。
 
-- 前端仓库：`main-diy`，分支最新提交应包含 `feat: add order-specific payment allocation`。
-- 后端仓库：`main`，分支最新提交应包含 `feat: add independent payment allocation`。
-- 前端服务器目录：`/root/opt/claude-ledger`。
-- 后端服务器目录：`/root/opt/claude-ledger-backend`。
-- 前端容器：`claude-ledger-frontend-1`，只监听 `127.0.0.1:3000`。
-- 后端容器：`claude-ledger-backend-api-1`，只监听 `127.0.0.1:8080`。
-- 公网入口：Nginx，访问地址 `https://47.94.95.143`。
+本文是操作说明，不表示已执行服务器部署。服务器信息沿用原部署记录，执行前应核对实际环境。
 
-> 本次发布包含数据库迁移。务必先备份数据库，再迁移，最后依次更新后端和前端。不要使用 `git reset --hard`，不要删除服务器现有 `.env`。
+## 1. 环境与发布前提
 
-## 1. 在本机确认待发布代码
+| 项目 | 前端 | 后端 |
+| --- | --- | --- |
+| 代码分支（沿用原记录） | `main-diy` | `main` |
+| 服务器目录 | `/root/opt/claude-ledger` | `/root/opt/claude-ledger-backend` |
+| Compose 文件 | `compose.yaml` | `docker-compose.yml` |
+| 应用服务名 | `frontend` | `api` |
+| 生产监听地址 | `127.0.0.1:3000` | `127.0.0.1:8080` |
 
-在哪里执行：开发用 Mac 终端。
+服务器：`47.94.95.143`；Nginx 公网入口：`https://47.94.95.143`。
 
-这一步在做什么：确认本地两个仓库已经包含本次功能提交，同时检查是否存在未提交文件。未提交文件不会进入后面生成的 Git bundle。
+发布前确认：
 
-```bash
-git -C /Users/macbookpro/Documents/dev/claude-ledger status --short --branch
-git -C /Users/macbookpro/Documents/dev/claude-ledger log -3 --oneline
+1. 前后端代码均已推送到 ACR 构建任务实际关联的仓库和分支。记录两个提交 SHA，不再以某次功能的提交标题作为发布条件。
+2. 两个 ACR 构建任务均已成功，目标镜像已经推送，镜像架构匹配服务器。
+3. 记录镜像完整地址、标签和 digest。优先使用发布专用标签或 `仓库@sha256:…`；使用 `latest` 时必须核对构建记录与拉取后的 digest，防止发布到其他并发构建的版本。
+4. 前端 Dockerfile 已固定 `NEXT_PUBLIC_API_MODE=real`；ACR 构建参数 `NEXT_PUBLIC_API_BASE_URL` 应为 `/api/v1`。公开环境变量已写入浏览器产物，服务器修改 `.env` 不会改变镜像中的值。变更 API 地址后应重新触发 ACR 构建。
+5. 后端若有新迁移，服务器 `migrations/` 必须与本次后端镜像对应提交一致。当前迁移服务挂载宿主机 `./migrations`，仅拉取 API 镜像不会更新迁移文件。
 
-git -C /Users/macbookpro/Documents/dev/claude-ledger-backend status --short --branch
-git -C /Users/macbookpro/Documents/dev/claude-ledger-backend log -3 --oneline
-```
+不要覆盖生产 `.env`，不要执行 `git reset --hard`、`git clean` 或 `docker compose down -v`。日常发布只更新两个应用服务，不重建数据库，不运行 seed。
 
-预期结果：
+## 2. 一次性确认生产镜像配置
 
-- 前端日志中能看到 `feat: add order-specific payment allocation`。
-- 后端日志中能看到 `feat: add independent payment allocation`。
-- 前端的 `next-env.d.ts` 和后端的 `.env.local-compose` 即使显示为未提交，也不要顺手删除；它们不属于本次发布提交。
-
-## 2. 在本机生成离线代码包
-
-在哪里执行：开发用 Mac 终端。
-
-这一步在做什么：由于当前 GitHub 登录账号没有两个仓库的写入权限，服务器不能通过远程仓库取得新提交。Git bundle 会把指定分支的完整 Git 提交和对象打成单文件，服务器收到后仍可用标准 Git 快进合并。
-
-```bash
-release_dir="$(mktemp -d /tmp/claude-ledger-release.XXXXXX)"
-
-git -C /Users/macbookpro/Documents/dev/claude-ledger \
-  bundle create "$release_dir/claude-ledger-frontend.bundle" main-diy
-
-git -C /Users/macbookpro/Documents/dev/claude-ledger-backend \
-  bundle create "$release_dir/claude-ledger-backend.bundle" main
-
-ls -lh "$release_dir"
-```
-
-预期结果：目录中出现两个非空的 `.bundle` 文件。
-
-## 3. 把代码包上传到服务器
-
-在哪里执行：仍在开发用 Mac 终端。
-
-这一步在做什么：使用 SSH 密码登录，将两个代码包复制到服务器 `/root/opt`。这一步只上传文件，不会修改正在运行的容器。
-
-```bash
-scp "$release_dir/claude-ledger-frontend.bundle" \
-  "$release_dir/claude-ledger-backend.bundle" \
-  root@47.94.95.143:/root/opt/
-```
-
-终端提示时输入服务器 root 密码。上传完成后再登录服务器：
+以下命令均在服务器 SSH 终端执行。登录：
 
 ```bash
 ssh root@47.94.95.143
 ```
 
-后续第 4～12 步均在服务器 SSH 终端执行。
-
-## 4. 检查当前生产状态
-
-在哪里执行：服务器 SSH 终端。
-
-这一步在做什么：在修改生产环境前确认 Nginx、数据库、前端和后端目前都正常。如果发布前已经异常，应先排查原故障，不要把故障和新版本混在一起处理。
-
-```bash
-docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
-nginx -t
-curl -fsS http://127.0.0.1:8080/health
-curl -fsSI http://127.0.0.1:3000/login | head
-curl -fsS https://47.94.95.143/health
-```
-
-预期结果：
-
-- `nginx -t` 显示配置测试成功。
-- 后端 `/health` 返回正常 JSON。
-- 前端 `/login` 返回 `HTTP/1.1 200`。
-- 公网 HTTPS 健康检查成功。
-
-## 5. 检查两个服务器仓库是否干净
-
-在哪里执行：服务器 SSH 终端。
-
-这一步在做什么：避免覆盖服务器上尚未保存的人工修改。`git merge --ff-only` 本身不会强行覆盖，但提前检查能减少误操作。
-
-```bash
-git -C /root/opt/claude-ledger status --short --branch
-git -C /root/opt/claude-ledger-backend status --short --branch
-```
-
-预期结果：两个仓库都不应出现未知的已修改或未跟踪代码文件。`.env` 通常被 Git 忽略，所以不会显示。
-
-如果这里出现不认识的改动：立即停止发布，先把输出保存下来确认用途。不要执行 `git reset --hard` 或 `git clean`。
-
-## 6. 创建发布备份
-
-在哪里执行：服务器 SSH 终端。
-
-这一步在做什么：保存发布前的数据库、代码提交号和容器镜像。代码或容器更新失败时，可以快速恢复到发布前状态。
-
-```bash
-release_stamp="$(date +%Y%m%d-%H%M%S)"
-backup_dir="/root/opt/backups/claude-ledger-$release_stamp"
-mkdir -p "$backup_dir"
-
-git -C /root/opt/claude-ledger rev-parse HEAD > "$backup_dir/frontend-commit.txt"
-git -C /root/opt/claude-ledger-backend rev-parse HEAD > "$backup_dir/backend-commit.txt"
-
-docker tag "$(docker inspect claude-ledger-frontend-1 --format '{{.Image}}')" \
-  "claude-ledger-frontend:pre-payment-$release_stamp"
-
-docker tag "$(docker inspect claude-ledger-backend-api-1 --format '{{.Image}}')" \
-  "claude-ledger-backend-api:pre-payment-$release_stamp"
-
-cd /root/opt/claude-ledger-backend
-docker compose exec -T postgres sh -c \
-  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
-  > "$backup_dir/database.dump"
-
-test -s "$backup_dir/database.dump"
-ls -lh "$backup_dir"
-```
-
-预期结果：
-
-- `database.dump` 大小不为 0。
-- 目录内有前后端提交号文件。
-- `docker image ls` 能看到两个带 `pre-payment-时间戳` 的备份镜像标签。
-
-如果 `pg_dump` 报错或 `test -s` 失败：停止发布，不要执行数据库迁移。
-
-## 7. 把新提交合入服务器代码目录
-
-在哪里执行：服务器 SSH 终端。
-
-这一步在做什么：从刚上传的 bundle 读取提交，并要求 Git 只能进行快进合并。`--ff-only` 可以防止服务器意外产生合并提交。
-
-先更新后端：
-
-```bash
-cd /root/opt/claude-ledger-backend
-git fetch /root/opt/claude-ledger-backend.bundle main
-git merge --ff-only FETCH_HEAD
-git log -3 --oneline
-```
-
-预期最近三条提交中包含：
+当前后端 Compose 中的 API 镜像为：
 
 ```text
-feat: add independent payment allocation
+crpi-qs80efbyksjfaftp.cn-beijing.personal.cr.aliyuncs.com/cloud-ledger/claude-ledger-backend:latest
 ```
 
-再更新前端：
+当前前端仓库的 Compose 仍包含 `build:`，且 `image:` 为本地名称 `claude-ledger-frontend:latest`，不能直接把它当作 ACR 镜像拉取。前端 ACR 的实际仓库名未保存在当前项目配置中，应从成功的 ACR 构建记录复制，不能猜测。
 
-```bash
-cd /root/opt/claude-ledger
-git fetch /root/opt/claude-ledger-frontend.bundle main-diy
-git merge --ff-only FETCH_HEAD
-git log -3 --oneline
+为两个项目分别创建服务器本地的 `compose.acr.yaml`，用于指定本次发布镜像。若文件已经存在，先检查并保存原内容，再更新镜像地址，不要覆盖其他生产配置。
+
+前端 `/root/opt/claude-ledger/compose.acr.yaml`：
+
+```yaml
+services:
+  frontend:
+    image: <替换为前端 ACR 完整镜像地址及标签或 digest>
 ```
 
-预期最近三条提交中包含：
+后端 `/root/opt/claude-ledger-backend/compose.acr.yaml`：
 
-```text
-feat: add order-specific payment allocation
+```yaml
+services:
+  api:
+    image: <替换为后端 ACR 完整镜像地址及标签或 digest>
 ```
 
-如果 `git merge --ff-only` 失败：停止发布并保留输出。不要改成普通 `git merge`，也不要强制重置分支。
+两个占位符必须替换后才能继续。后端可使用上方已知地址，但发布专用标签或 digest 应以实际构建结果为准。覆盖文件只改应用镜像，沿用原 Compose 的环境变量、网络、健康检查及数据卷。前端遗留的 `build:` 不会被覆盖文件删除，因此所有启动命令都必须带 `--no-build`。
 
-## 8. 核对生产环境变量
+前端生产 `.env` 应包含以下非密钥配置；已存在 `.env` 时只核对对应项：
 
-在哪里执行：服务器 SSH 终端。
-
-这一步在做什么：确认浏览器始终通过当前 HTTPS 域名访问同源 API，后端也允许当前公网来源。这里只检查配置，不要把包含密码或 JWT 密钥的完整 `.env` 发到聊天或截图中。
-
-前端检查：
-
-```bash
-grep -E '^(NEXT_PUBLIC_API_MODE|NEXT_PUBLIC_API_BASE_URL|FRONTEND_PORT)=' \
-  /root/opt/claude-ledger/.env
-```
-
-应至少包含：
-
-```text
+```dotenv
 NEXT_PUBLIC_API_MODE=real
 NEXT_PUBLIC_API_BASE_URL=/api/v1
 FRONTEND_PORT=127.0.0.1:3000
 ```
 
-如果 `FRONTEND_PORT` 当前写法不同，但 `docker compose ps` 显示的确是 `127.0.0.1:3000->3000/tcp`，保持现状即可。
+`NEXT_PUBLIC_API_BASE_URL` 在此也用于满足原 Compose 的变量校验；实际浏览器地址仍由 ACR 构建时的值决定。后端核对 `APP_ENV=production`、`COOKIE_SECURE=true`，以及 `CORS_ORIGINS` 包含实际 HTTPS 入口，保留数据库凭据和 JWT 密钥。
 
-后端检查：
-
-```bash
-grep -E '^(APP_ENV|COOKIE_SECURE|CORS_ORIGINS)=' \
-  /root/opt/claude-ledger-backend/.env
-```
-
-应包含或等价于：
-
-```text
-APP_ENV=production
-COOKIE_SECURE=true
-CORS_ORIGINS=http://47.94.95.143,https://47.94.95.143
-```
-
-不要修改数据库密码、JWT 密钥或其他生产密钥。
-
-## 9. 执行数据库迁移
-
-在哪里执行：服务器 SSH 终端，后端目录。
-
-这一步在做什么：在已有第 5 版补料/退料结构之上应用 `000006_create_payment_allocations`，新增收款与订单的核销关系表，并为历史上开单时直接付款的记录回填核销关系。
+定义后续使用的 Compose 快捷函数，确保每次都加载基础文件和 ACR 覆盖文件。**后续命令需在同一 Bash 会话中运行；重新登录后先重新定义函数。**
 
 ```bash
-cd /root/opt/claude-ledger-backend
-docker compose --profile tools run --rm migrate up
+bash
+fe() {
+  (cd /root/opt/claude-ledger && docker compose -f compose.yaml -f compose.acr.yaml "$@")
+}
+be() {
+  (cd /root/opt/claude-ledger-backend && docker compose -f docker-compose.yml -f compose.acr.yaml "$@")
+}
+
+fe config --quiet
+be config --quiet
+fe config --images
+be config --images
+fe ps
+be ps
 ```
 
-预期输出包含：
+确认输出中的两个应用镜像正是本次 ACR 构建产物；两个 `config --quiet` 都必须成功。不要分享完整 `config` 输出，其中可能包含生产密钥。使用既有 Compose 项目名，不要另加 `-p` 或改变原 `COMPOSE_PROJECT_NAME`。
 
-```text
-6/u create_payment_allocations
-```
+## 3. 每次发布：检查并保存回滚镜像
 
-确认数据库当前迁移版本：
+先确认当前应用、数据库和 Nginx 正常：
 
 ```bash
-docker compose --profile tools run --rm migrate version
+fe ps
+be ps
+nginx -t
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS -o /dev/null http://127.0.0.1:3000/login
 ```
 
-预期版本是 `6`，且不是 dirty 状态。
+每条检查成功后再继续。如果发布前已经异常，先排查原故障。
 
-如果迁移失败：不要启动新版后端，也不要随意执行 `migrate force`。保留错误输出，根据第 13 节恢复数据库或排查迁移问题。
-
-## 10. 构建并切换后端
-
-在哪里执行：服务器 SSH 终端，后端目录。
-
-这一步在做什么：先构建包含新接口的 Go 镜像，构建成功后只重建 API 容器，不重建 PostgreSQL。数据库在迁移和构建期间仍可由旧 API 服务。
+在拉取新镜像之前保存当前运行镜像。以下代码在子 shell 中遇错停止；必须看到最后的备份路径才算完成：
 
 ```bash
-cd /root/opt/claude-ledger-backend
-docker compose build api
-docker compose up -d --no-deps api
-docker compose ps api
-docker compose logs --no-color --tail=80 api
+(
+  set -eu
+  release_stamp="$(date +%Y%m%d-%H%M%S)"
+  backup_dir="/root/opt/backups/claude-ledger-$release_stamp"
+  mkdir -p "$backup_dir"
+  chmod 700 "$backup_dir"
+  fe_id="$(fe ps -q frontend)"
+  be_id="$(be ps -q api)"
+  test -n "$fe_id"
+  test -n "$be_id"
+  fe_image="$(docker inspect "$fe_id" --format '{{.Image}}')"
+  be_image="$(docker inspect "$be_id" --format '{{.Image}}')"
+  docker tag "$fe_image" "claude-ledger-frontend:rollback-$release_stamp"
+  docker tag "$be_image" "claude-ledger-backend-api:rollback-$release_stamp"
+  printf '%s\n' "$fe_image" > "$backup_dir/frontend-image-id.txt"
+  printf '%s\n' "$be_image" > "$backup_dir/backend-image-id.txt"
+  printf 'services:\n  frontend:\n    image: claude-ledger-frontend:rollback-%s\n' "$release_stamp" > "$backup_dir/frontend.rollback.yaml"
+  printf 'services:\n  api:\n    image: claude-ledger-backend-api:rollback-%s\n' "$release_stamp" > "$backup_dir/backend.rollback.yaml"
+  printf '备份目录：%s\n' "$backup_dir"
+)
+```
+
+记下输出的真实路径，在后续命令中赋值：
+
+```bash
+backup_dir='/root/opt/backups/claude-ledger-替换为上一步时间戳'
+test -s "$backup_dir/frontend.rollback.yaml"
+test -s "$backup_dir/backend.rollback.yaml"
+```
+
+任一验证失败时停止。发布验收和回滚窗口结束前，不要清理这些旧镜像。
+
+## 4. 登录 ACR 并拉取前后端镜像
+
+使用 ACR 提供的用户名和仓库访问凭证登录。以下是当前后端的 Registry；前端若使用另一个 Registry，还需要登录该地址：
+
+```bash
+docker login crpi-qs80efbyksjfaftp.cn-beijing.personal.cr.aliyuncs.com
+be pull api && fe pull frontend
+```
+
+两个镜像都拉取成功后，核对输出的 digest 与 ACR 发布记录，然后才能执行迁移或切换。拉取不会替换正在运行的容器。失败时解决仓库权限、标签或网络问题再重试，不要退回服务器构建。
+
+## 5. 有数据库迁移时：同步文件、备份、迁移
+
+没有新迁移时跳过本节。应用镜像更新通常不要求服务器拉取全部业务源码，但本项目迁移读取宿主机文件，因此有新迁移时必须同步匹配镜像版本的 `migrations/` 和必要的部署配置。
+
+同步前检查服务器仓库 `git status --short --branch`。使用当前可用的 Git 或文件传输流程取得准确的发布提交，不覆盖人工修改和 `.env`。Git bundle 只是无法访问远程仓库时的备用传输方式，不是每次镜像部署的必需步骤。
+
+先备份数据库并验证备份可读；本块失败后不可继续迁移：
+
+```bash
+(
+  set -eu
+  : "${backup_dir:?请先设置本次备份目录}"
+  test -d "$backup_dir"
+  umask 077
+  be exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$backup_dir/database.dump"
+  test -s "$backup_dir/database.dump"
+  be exec -T postgres pg_restore --list < "$backup_dir/database.dump" > "$backup_dir/database-toc.txt"
+  test -s "$backup_dir/database-toc.txt"
+)
+```
+
+确认 `DATABASE_URL` 指向当前生产数据库，迁移脚本与目标镜像匹配，并评估旧 API 是否能在迁移期间继续工作。不兼容或长时间锁表的迁移需安排维护窗口、暂停业务写入。
+
+```bash
+be --profile tools run --rm --no-deps --no-build migrate version
+be --profile tools run --rm --no-deps --no-build migrate up
+be --profile tools run --rm --no-deps --no-build migrate version
+```
+
+每条成功后再运行下一条；预期版本以本次发布脚本为准。当前本地项目最高迁移是 `000006_create_payment_allocations`，对应版本 6，但以后不能把 6 当作固定目标。结果必须不是 dirty 状态。
+
+`migrate` 当前使用 `migrate/migrate:v4.19.1` 工具镜像，不在 API 镜像内；缺少时需提前确保该镜像可获取。`--no-deps` 不会启动数据库，因此数据库必须已经运行且健康。迁移失败时停止发布，保留错误，不随意 `force` 或 `down`。
+
+## 6. 切换后端，再切换前端
+
+先更新后端，仅替换 API 服务：
+
+```bash
+be up -d --no-deps --no-build --pull never api
+be ps api
+be logs --no-color --tail=80 api
 curl -fsS http://127.0.0.1:8080/health
 ```
 
-预期结果：
-
-- API 容器状态为 `Up`。
-- 日志中没有数据库迁移、约束或启动错误。
-- 本机 `/health` 返回正常结果。
-
-如果 Docker Hub 下载超时：不要反复重启线上容器。保留旧容器运行，先解决镜像下载或从其他机器传入对应的 Linux amd64 基础镜像，再重新执行 `docker compose build api`。
-
-## 11. 构建并切换前端
-
-在哪里执行：服务器 SSH 终端，前端目录。
-
-这一步在做什么：构建包含“自动核销最早订单”和“指定订单结款”入口的新 Next.js 镜像。只有构建完全成功后，Compose 才会重建线上前端容器。
+等待后端启动完成，确认健康接口成功、日志无启动错误，再更新前端：
 
 ```bash
-cd /root/opt/claude-ledger
-docker compose build frontend
-docker compose up -d --no-deps frontend
-docker compose ps frontend
-docker compose logs --no-color --tail=80 frontend
+fe up -d --no-deps --no-build --pull never frontend
+fe ps frontend
+fe logs --no-color --tail=80 frontend
+docker inspect "$(fe ps -q frontend)" --format '{{.State.Health.Status}}'
+curl -fsS -o /dev/null http://127.0.0.1:3000/login
 ```
 
-等待健康检查变为 `healthy`：
+前端健康检查可能需要几十秒，等待状态变为 `healthy`。启动成功不等于验收完成。`--no-build` 明确禁止本机构建，`--pull never` 确保使用刚才已拉取并核对的本地镜像，`--no-deps` 避免同时操作数据库等依赖。
 
-```bash
-docker inspect claude-ledger-frontend-1 --format '{{.State.Health.Status}}'
-curl -fsSI http://127.0.0.1:3000/login | head
-```
+Compose 会在镜像变更后重建对应容器，通常无需 `--force-recreate`，也无需先执行 `down`。单实例切换可能存在短暂中断。
 
-预期结果：健康状态为 `healthy`，登录页返回 200。
-
-## 12. 检查 Nginx 和公网访问
-
-在哪里执行：服务器 SSH 终端，然后在自己的电脑浏览器验收。
-
-这一步在做什么：确认 Nginx 配置仍然只使用公网 IP，不再依赖 DuckDNS；确认 HTTP 会跳转 HTTPS，前端和 API 均能从公网访问。
-
-服务器执行：
+## 7. 验收并记录实际运行版本
 
 ```bash
 nginx -t
-grep -n -E 'server_name|duckdns|proxy_pass' /etc/nginx/conf.d/cloud-ledger.conf
 curl -fsS https://47.94.95.143/health
-curl -fsSI https://47.94.95.143/login | head
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  -H 'Content-Type: application/json' \
-  -d '{}' \
-  https://47.94.95.143/api/v1/auth/login
+curl -fsS -o /dev/null https://47.94.95.143/login
+curl -sS -o /dev/null -w '%{http_code}\n' http://47.94.95.143/
+docker inspect "$(fe ps -q frontend)" --format '{{.Config.Image}} {{.Image}}'
+docker inspect "$(be ps -q api)" --format '{{.Config.Image}} {{.Image}}'
 ```
 
-预期结果：
+确认 HTTPS 正常、HTTP 跳转 HTTPS（原环境预期 308）、运行镜像与目标版本一致。证书校验失败时排查证书，不把忽略校验作为验收通过。
 
-- `nginx -t` 成功。
-- `server_name` 只有 `47.94.95.143`，没有 DuckDNS。
-- `/health` 和 `/login` 正常。
-- 空登录请求返回 `422`，这表示公网 Nginx 已把 `/api/v1` 正确转发给后端，而不是接口不存在。
+浏览器登录，检查页面加载、API 请求、登录态和本次变更对应的业务流程。补料、退料、指定订单收款、自动核销等写入验收应使用约定的测试账号和测试业务数据，避免污染真实账务。
 
-自己的电脑执行：
+在本次备份目录记录前后端提交 SHA、ACR 构建编号、目标 digest、实际运行镜像 ID、数据库版本、发布时间及验收结果。暂时保留数据库备份和回滚镜像。
+
+## 8. 回滚应用
+
+先设置 `backup_dir` 为第 3 节记录的实际备份路径。回滚文件引用发布前运行镜像的独立本地标签，不依赖已移动的 `latest`，也不拉取远端镜像。
+
+回滚前端：
 
 ```bash
-curl -fsSI http://47.94.95.143/ | head
-curl -fsSI https://47.94.95.143/login | head
+fe -f "$backup_dir/frontend.rollback.yaml" up -d --no-deps --no-build --pull never frontend
+fe ps frontend
+curl -fsS -o /dev/null http://127.0.0.1:3000/login
 ```
 
-HTTP 应返回 `308` 并跳转到 HTTPS；HTTPS 登录页应返回 `200`。
-
-## 13. 使用真实账号进行业务验收
-
-在哪里执行：电脑浏览器访问 `https://47.94.95.143`。
-
-这一步在做什么：确认不仅容器健康，而且真实账号、权限、价格和账务数据可以走通完整业务链路。
-
-建议选择一张专门用于验收、尚未结清的测试用料单：
-
-1. 登录后进入“用料记录”，打开一张订单详情。
-2. 确认页面右上角出现“补料”和“退料”按钮。
-3. 点击“补料”，选择一种材料，输入数量后提交。
-4. 确认当前材料数量、累计领料金额和未结金额相应增加。
-5. 查看“用料变动流水”，确认出现补料单号、材料、操作人和时间。
-6. 点击“退料”，退回刚才补入数量的一部分。
-7. 确认当前数量、累计退料金额和未结金额相应减少。
-8. 刷新页面，确认结果仍然存在，且流水没有重复。
-9. 进入“收款”，选择该客户，先选“指定一张订单”，对一张未结订单登记一笔小额部分收款。
-10. 确认收款列表展示指定订单号，订单已结金额增加、未结金额等额减少。
-11. 再登记一笔“自动核销最早未结订单”的收款，确认系统优先冲减最早的未结订单。
-
-当前安全规则：
-
-- 退料数量不能超过这张订单当前剩余数量。
-- 退料金额不能超过这张订单当前未结金额。
-- 已收款部分如果也要退，需要先设计退款或转预存余额流程；当前版本会拒绝这种操作，防止账务出现无法解释的负数。
-- 多人同时调整同一张订单时，后提交者会看到版本冲突提示，刷新后可以重新操作。
-- 指定订单时，收款金额不能超过该订单未结金额；不指定时会按业务时间和创建顺序自动核销。
-
-## 14. 应用回滚
-
-仅当新版后端或前端出现无法立即修复的问题时执行。
-
-### 14.1 回滚前端容器
-
-这一步在做什么：把 `latest` 标签重新指向第 6 步保存的旧前端镜像，然后重建前端容器。不会影响数据库。
+回滚后端前，先确认旧 API 与当前数据库结构、已产生的新数据兼容：
 
 ```bash
-docker image ls 'claude-ledger-frontend:pre-payment-*'
-docker tag "claude-ledger-frontend:pre-payment-$release_stamp" claude-ledger-frontend:latest
-cd /root/opt/claude-ledger
-docker compose up -d --no-build --no-deps --force-recreate frontend
-docker compose ps frontend
-```
-
-如果 SSH 会话已经断开、`release_stamp` 变量不存在，请从 `docker image ls` 输出复制完整备份标签，不要猜时间戳。
-
-### 14.2 回滚后端容器
-
-这一步在做什么：恢复旧后端镜像。数据库第 6 版迁移可以暂时保留，旧 API 不会使用新增的核销关系表。
-
-```bash
-docker image ls 'claude-ledger-backend-api:pre-payment-*'
-docker tag "claude-ledger-backend-api:pre-payment-$release_stamp" claude-ledger-backend-api:latest
-cd /root/opt/claude-ledger-backend
-docker compose up -d --no-build --no-deps --force-recreate api
+be -f "$backup_dir/backend.rollback.yaml" up -d --no-deps --no-build --pull never api
+be ps api
 curl -fsS http://127.0.0.1:8080/health
 ```
 
-### 14.3 数据库回滚原则
+回滚覆盖文件临时指定旧镜像；原 `compose.acr.yaml` 仍指向新版本。回滚成功后，应把其镜像地址改为经核对的旧版本地址，或在后续操作中持续加载回滚覆盖文件，避免再次启动失败版本。
 
-如果上线后没有产生任何独立收款数据，可以在确认备份有效后执行：
+应用回滚不会撤销迁移。不要机械执行 `migrate down 1`；先评估数据损失与兼容性。恢复整库需要停止业务写入、确认恢复时间点及备份后新增数据的处理方式，并执行经过验证的恢复流程。这里不把破坏性数据库操作作为常规发布步骤。
 
-```bash
-cd /root/opt/claude-ledger-backend
-docker compose --profile tools run --rm migrate down 1
-```
+## 9. 日常发布速查
 
-如果已经产生真实独立收款数据，不要直接执行数据库降级。降级会删除收款与订单的核销关系，虽然付款和应收流水仍在，但订单级追溯会丢失。需要完整回到发布前状态时，应停掉 API，并使用第 6 步的 `database.dump` 恢复整个数据库；这会丢失备份之后产生的所有业务数据，必须先与业务人员确认时间窗口。
-
-## 15. 发布成功后的记录与清理
-
-在哪里执行：服务器 SSH 终端。
-
-这一步在做什么：保留可追溯的发布信息，并把上传的 bundle 移入本次备份目录。这里使用移动而不是直接删除，方便短期内恢复或核对。
+完成 ACR 配置、定义 `fe` / `be` 函数、记录旧镜像，且确认无需迁移后，核心操作是：
 
 ```bash
-git -C /root/opt/claude-ledger rev-parse HEAD
-git -C /root/opt/claude-ledger-backend rev-parse HEAD
-docker compose -f /root/opt/claude-ledger/compose.yaml ps
-docker compose -f /root/opt/claude-ledger-backend/docker-compose.yml ps
-
-mv /root/opt/claude-ledger-frontend.bundle "$backup_dir/"
-mv /root/opt/claude-ledger-backend.bundle "$backup_dir/"
+be pull api && fe pull frontend
+# 上行必须成功；核对两个镜像 digest 后继续。
+be up -d --no-deps --no-build --pull never api
+# 确认后端 /health 成功后继续。
+fe up -d --no-deps --no-build --pull never frontend
 ```
 
-最终确认：
-
-- 前端提交历史包含 `feat: add order-specific payment allocation`。
-- 后端提交历史包含 `feat: add independent payment allocation`。
-- 数据库迁移版本为 `6`。
-- 前端容器为 `healthy`，后端 `/health` 正常。
-- 公网 HTTPS 正常。
-- 至少完成一次指定订单部分结款和一次自动核销验收。
+有迁移时，在拉取成功后、切换后端前插入第 5 节。无论前端还是后端，都不在服务器重新构建镜像。

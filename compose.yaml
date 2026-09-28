@@ -1,11 +1,6 @@
 services:
   frontend:
-    image: claude-ledger-frontend:latest
-    build:
-      context: .
-      args:
-        NEXT_PUBLIC_API_MODE: ${NEXT_PUBLIC_API_MODE:-real}
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?请在 .env 中配置后端 API 地址}
+    image: crpi-qs80efbyksjfaftp.cn-beijing.personal.cr.aliyuncs.com/cloud-ledger/cloud-ledger:latest
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     restart: unless-stopped

@@ -52,29 +52,23 @@ npm run start -- --port 3001
 
 真实模式不静默回退到 mock。前端 Guard 和 PermissionGate 只控制界面，服务端必须逐请求验证权限、令牌和账号状态。mock 使用进程内会话，服务重启后会话失效，不具备正式身份系统的密码存储、持久会话或登录限流。
 
-## Docker 部署
+## Docker 部署（前后端 ACR 镜像）
 
-项目使用 Next.js standalone 输出和多阶段构建，生产镜像只包含运行所需文件，并以非 root 用户启动。先复制 Docker 配置并填写浏览器可访问的 Go API 地址：
+生产环境统一使用 ACR 已构建并推送的镜像。代码更新并且前后端 ACR 构建成功后，服务器只拉取镜像、按需迁移数据库，再依次更新后端 `api` 和前端 `frontend`。所有启动命令必须带 `--no-build`，服务器不执行镜像构建。
 
-```bash
-cp .env.docker.example .env
-```
+完整步骤、服务器路径、备份、迁移、健康检查及回滚见 [生产部署手册](docs/production-deployment-runbook.md)。
 
-然后构建并启动：
+注意：当前前端 `compose.yaml` 的 `image` 仍是本地镜像名，不能直接用于 ACR 拉取。先按手册配置两个项目的 `compose.acr.yaml`，填入真实 ACR 镜像地址，并定义手册中的 `be` / `fe` 函数。完成备份、确认本次无需数据库迁移后，核心操作如下：
 
 ```bash
-docker compose up -d --build
-docker compose ps
+be pull api && fe pull frontend
+# 确认两个镜像拉取成功、digest 正确后再更新后端。
+be up -d --no-deps --no-build --pull never api
+# 后端健康检查通过后再更新前端。
+fe up -d --no-deps --no-build --pull never frontend
 ```
 
-默认访问 http://localhost:3000 。如需查看日志或停止服务：
-
-```bash
-docker compose logs -f frontend
-docker compose down
-```
-
-`NEXT_PUBLIC_API_MODE` 和 `NEXT_PUBLIC_API_BASE_URL` 会在镜像构建时固化，修改后必须再次执行 `docker compose up -d --build`。这里的 API 地址由用户浏览器访问，不应填写仅在 Docker 网络内可解析的服务名；同站 Nginx 转发 `/api/` 时可填写相对地址 `/api/v1`，这样切换 HTTP/HTTPS 无需重新构建前端。跨域部署时，Go 后端还需允许前端站点的 Origin 和凭据。正式部署不要启用 `ALLOW_LOCAL_MOCK_BUILD`。
+`NEXT_PUBLIC_API_BASE_URL` 在 ACR 构建时写入前端产物，同站 Nginx 转发 `/api/` 时使用 `/api/v1`。修改后需重新触发 ACR 构建并部署新镜像，仅修改服务器 `.env` 不会生效。当前 Dockerfile 已固定真实 API 模式。不要覆盖服务器已有 `.env`。
 
 ## 验证
 
@@ -87,9 +81,9 @@ npm run typecheck
 
 路由变化时可先运行 `npx next typegen` 刷新生成类型。测试覆盖并发刷新、刷新失败、过期退出、幂等键保留、取消请求、各类错误、字段映射、Decimal 格式化与权限基础。
 
-## 测试服务器镜像
+## 本地验证测试镜像（开发电脑）
 
-`NEXT_PUBLIC_API_BASE_URL` 会写入浏览器端产物，必须在构建镜像时传入。推荐让前端和 API 位于同一站点，由反向代理把 `/api/` 转发给 Go 服务：
+以下仅在开发电脑验证 Dockerfile；生产服务器部署使用上方 ACR 流程。`NEXT_PUBLIC_API_BASE_URL` 会写入浏览器端产物，必须在构建镜像时传入。让前端和 API 位于同一站点，由反向代理把 `/api/` 转发给 Go 服务：
 
 ```bash
 docker build \

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# Use BuildKit's bundled frontend to avoid an extra Docker Hub image pull.
 FROM node:22-alpine AS dependencies
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -6,7 +6,7 @@ RUN npm ci
 
 FROM node:22-alpine AS build
 WORKDIR /app
-ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_API_BASE_URL=/api/v1
 ENV NEXT_PUBLIC_API_MODE=real
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 COPY --from=dependencies /app/node_modules ./node_modules
