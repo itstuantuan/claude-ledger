@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { projectStatusLabels, entityStatusLabels } from '@/features/customers/labels';
 import type { ProjectStatus } from '@/features/customers/schema';
 import { cn } from '@/lib/utils';
+import { formatStoreDateTime } from '@/lib/utils/datetime';
 
 export function StatusBadge({ status }: { status: 'ACTIVE' | 'DISABLED' | ProjectStatus }) {
   const label = status in projectStatusLabels ? projectStatusLabels[status as ProjectStatus] : entityStatusLabels[status as 'ACTIVE' | 'DISABLED'];
@@ -21,5 +22,5 @@ export function Pagination({ page, pageSize, total, href }: { page: number; page
   return <div className="flex items-center justify-between border-t border-[#e7e7e3] px-4 py-3 text-[11px] text-[#8c9189]"><span>共 {total} 条 · 第 {page} / {pages} 页</span><div className="flex gap-1.5"><Button asChild variant="outline" size="icon" disabled={page <= 1}><Link className="aria-disabled:pointer-events-none aria-disabled:opacity-45" aria-label="上一页" aria-disabled={page <= 1} href={href(Math.max(1, page - 1))}><ChevronLeft size={15} /></Link></Button><Button asChild variant="outline" size="icon" disabled={page >= pages}><Link className="aria-disabled:pointer-events-none aria-disabled:opacity-45" aria-label="下一页" aria-disabled={page >= pages} href={href(Math.min(pages, page + 1))}><ChevronRight size={15} /></Link></Button></div></div>;
 }
 export function formatDateTime(value: string | null) {
-  return value ? new Intl.DateTimeFormat('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }).format(new Date(value)) : '暂无交易';
+  return value ? formatStoreDateTime(value) : '暂无交易';
 }

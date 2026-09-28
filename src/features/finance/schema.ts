@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { storeDateInput } from '@/lib/utils/datetime';
 import { pageMetaSchema } from '@/features/customers/schema';
 import { paymentMethodSchema } from '@/features/orders/schema';
 
@@ -28,7 +29,7 @@ export const prepaidPageSchema = pageMetaSchema.extend({ items: z.array(prepaidS
 
 export const returnInputSchema = z.object({
   orderId: z.string().min(1, '请选择原用料单'),
-  occurredAt: z.string().min(1, '请选择退料日期').default(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())),
+  occurredAt: z.string().min(1, '请选择退料日期').default(() => storeDateInput()),
   items: z.array(z.object({ materialId: z.string(), quantity: quantitySchema })).min(1, '至少选择一种退料材料'),
   note: z.string().trim().max(200).default(''),
 });
