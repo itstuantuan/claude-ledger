@@ -42,8 +42,11 @@ export async function handleMockFinance(request:NextRequest,resource:string){
     const parsed=paymentInputSchema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return mockFail(422,'VALIDATION_ERROR','请检查收款信息。',parsed.error.flatten().fieldErrors);
     const worker=findMockWorker(parsed.data.workerId);if(!worker)return mockFail(404,'WORKER_NOT_FOUND','油漆工不存在。');
     const amount=toMinorUnits(parsed.data.amount),before=toMinorUnits(worker.receivable);if(amount>before)return mockFail(422,'PAYMENT_EXCEEDED','收款金额不能超过当前应收。');
-    const item:Payment={id:`pay-${randomUUID()}`,transactionNo:serial('SK',payments.length),workerId:worker.id,workerName:worker.name,amount:fromMinorUnits(amount),paymentMethod:parsed.data.paymentMethod,occurredAt:new Date(parsed.data.occurredAt).toISOString(),note:parsed.data.note,operatorName:user.name,createdAt:now,receivableBefore:fromMinorUnits(before),receivableAfter:fromMinorUnits(before-amount)};
-    payments=[item,...payments];submitted.set(`${resource}:${key}`,item);applyMockWorkerPayment(worker.id,amount);updateMockWorkerFinancials(worker.id,{paymentTotal:amount,receivable:-amount,occurredAt:item.occurredAt});return NextResponse.json(item,{status:201});
+    const specified=parsed.data.allocations.map(allocation=>({orderId:allocation.orderId,amount:toMinorUnits(allocation.amount)}));
+    if(specified.length){const total=specified.reduce((sum,item)=>sum+item.amount,0n);if(total!==amount)return mockFail(422,'PAYMENT_ALLOCATION_MISMATCH','指定订单的核销金额合计必须等于本次收款金额。');for(const allocation of specified){const order=findMockOrder(allocation.orderId);if(!order||order.workerId!==worker.id||allocation.amount>toMinorUnits(order.outstandingAmount))return mockFail(422,'PAYMENT_ALLOCATION_EXCEEDED','指定订单无效或核销金额超过未结金额。');}}
+    const applied=applyMockWorkerPayment(worker.id,amount,specified);
+    const item:Payment={id:`pay-${randomUUID()}`,transactionNo:serial('SK',payments.length),workerId:worker.id,workerName:worker.name,amount:fromMinorUnits(amount),paymentMethod:parsed.data.paymentMethod,occurredAt:new Date(parsed.data.occurredAt).toISOString(),note:parsed.data.note,operatorName:user.name,createdAt:now,receivableBefore:fromMinorUnits(before),receivableAfter:fromMinorUnits(before-amount),allocations:applied.allocations,unallocatedAmount:fromMinorUnits(amount-applied.applied)};
+    payments=[item,...payments];submitted.set(`${resource}:${key}`,item);updateMockWorkerFinancials(worker.id,{paymentTotal:amount,receivable:-amount,occurredAt:item.occurredAt});return NextResponse.json(item,{status:201});
   }
   if(resource==='prepaid'){
     if(!user.permissions.includes('prepaid:deposit'))return mockFail(403,'FORBIDDEN','你没有登记预存款的权限。');

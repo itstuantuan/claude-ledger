@@ -1,11 +1,11 @@
 # 云记账生产部署手册
 
-本文档用于把“同一张用料单追加补料/退料流水”版本部署到当前生产服务器 `47.94.95.143`。
+本文档用于把“订单补料/退料 + 独立收款指定订单核销”版本部署到当前生产服务器 `47.94.95.143`。
 
 本次目标版本：
 
-- 前端仓库：`main-diy`，目标提交 `0d8779b`（包含此前 HTTPS 与 UUID 修复）。
-- 后端仓库：`main`，目标提交 `b113cfe`。
+- 前端仓库：`main-diy`，分支最新提交应包含 `feat: add order-specific payment allocation`。
+- 后端仓库：`main`，分支最新提交应包含 `feat: add independent payment allocation`。
 - 前端服务器目录：`/root/opt/claude-ledger`。
 - 后端服务器目录：`/root/opt/claude-ledger-backend`。
 - 前端容器：`claude-ledger-frontend-1`，只监听 `127.0.0.1:3000`。
@@ -30,8 +30,8 @@ git -C /Users/macbookpro/Documents/dev/claude-ledger-backend log -3 --oneline
 
 预期结果：
 
-- 前端日志中能看到 `0d8779b feat: add order supplement and return workflow`。
-- 后端日志中能看到 `b113cfe feat: add order material adjustment ledger`。
+- 前端日志中能看到 `feat: add order-specific payment allocation`。
+- 后端日志中能看到 `feat: add independent payment allocation`。
 - 前端的 `next-env.d.ts` 和后端的 `.env.local-compose` 即使显示为未提交，也不要顺手删除；它们不属于本次发布提交。
 
 ## 2. 在本机生成离线代码包
@@ -125,10 +125,10 @@ git -C /root/opt/claude-ledger rev-parse HEAD > "$backup_dir/frontend-commit.txt
 git -C /root/opt/claude-ledger-backend rev-parse HEAD > "$backup_dir/backend-commit.txt"
 
 docker tag "$(docker inspect claude-ledger-frontend-1 --format '{{.Image}}')" \
-  "claude-ledger-frontend:pre-adjustment-$release_stamp"
+  "claude-ledger-frontend:pre-payment-$release_stamp"
 
 docker tag "$(docker inspect claude-ledger-backend-api-1 --format '{{.Image}}')" \
-  "claude-ledger-backend-api:pre-adjustment-$release_stamp"
+  "claude-ledger-backend-api:pre-payment-$release_stamp"
 
 cd /root/opt/claude-ledger-backend
 docker compose exec -T postgres sh -c \
@@ -143,7 +143,7 @@ ls -lh "$backup_dir"
 
 - `database.dump` 大小不为 0。
 - 目录内有前后端提交号文件。
-- `docker image ls` 能看到两个带 `pre-adjustment-时间戳` 的备份镜像标签。
+- `docker image ls` 能看到两个带 `pre-payment-时间戳` 的备份镜像标签。
 
 如果 `pg_dump` 报错或 `test -s` 失败：停止发布，不要执行数据库迁移。
 
@@ -165,7 +165,7 @@ git log -3 --oneline
 预期最近三条提交中包含：
 
 ```text
-b113cfe feat: add order material adjustment ledger
+feat: add independent payment allocation
 ```
 
 再更新前端：
@@ -180,7 +180,7 @@ git log -3 --oneline
 预期最近三条提交中包含：
 
 ```text
-0d8779b feat: add order supplement and return workflow
+feat: add order-specific payment allocation
 ```
 
 如果 `git merge --ff-only` 失败：停止发布并保留输出。不要改成普通 `git merge`，也不要强制重置分支。
@@ -229,7 +229,7 @@ CORS_ORIGINS=http://47.94.95.143,https://47.94.95.143
 
 在哪里执行：服务器 SSH 终端，后端目录。
 
-这一步在做什么：应用 `000005_create_order_adjustments`，新增补料/退料头表、明细表和订单版本号，并调整订单金额约束。迁移也会根据已有订单回填项目累计用料金额。
+这一步在做什么：在已有第 5 版补料/退料结构之上应用 `000006_create_payment_allocations`，新增收款与订单的核销关系表，并为历史上开单时直接付款的记录回填核销关系。
 
 ```bash
 cd /root/opt/claude-ledger-backend
@@ -239,7 +239,7 @@ docker compose --profile tools run --rm migrate up
 预期输出包含：
 
 ```text
-5/u create_order_adjustments
+6/u create_payment_allocations
 ```
 
 确认数据库当前迁移版本：
@@ -248,7 +248,7 @@ docker compose --profile tools run --rm migrate up
 docker compose --profile tools run --rm migrate version
 ```
 
-预期版本是 `5`，且不是 dirty 状态。
+预期版本是 `6`，且不是 dirty 状态。
 
 如果迁移失败：不要启动新版后端，也不要随意执行 `migrate force`。保留错误输出，根据第 13 节恢复数据库或排查迁移问题。
 
@@ -279,7 +279,7 @@ curl -fsS http://127.0.0.1:8080/health
 
 在哪里执行：服务器 SSH 终端，前端目录。
 
-这一步在做什么：构建包含订单详情“补料/退料”入口的新 Next.js 镜像。只有构建完全成功后，Compose 才会重建线上前端容器。
+这一步在做什么：构建包含“自动核销最早订单”和“指定订单结款”入口的新 Next.js 镜像。只有构建完全成功后，Compose 才会重建线上前端容器。
 
 ```bash
 cd /root/opt/claude-ledger
@@ -349,6 +349,9 @@ HTTP 应返回 `308` 并跳转到 HTTPS；HTTPS 登录页应返回 `200`。
 6. 点击“退料”，退回刚才补入数量的一部分。
 7. 确认当前数量、累计退料金额和未结金额相应减少。
 8. 刷新页面，确认结果仍然存在，且流水没有重复。
+9. 进入“收款”，选择该客户，先选“指定一张订单”，对一张未结订单登记一笔小额部分收款。
+10. 确认收款列表展示指定订单号，订单已结金额增加、未结金额等额减少。
+11. 再登记一笔“自动核销最早未结订单”的收款，确认系统优先冲减最早的未结订单。
 
 当前安全规则：
 
@@ -356,6 +359,7 @@ HTTP 应返回 `308` 并跳转到 HTTPS；HTTPS 登录页应返回 `200`。
 - 退料金额不能超过这张订单当前未结金额。
 - 已收款部分如果也要退，需要先设计退款或转预存余额流程；当前版本会拒绝这种操作，防止账务出现无法解释的负数。
 - 多人同时调整同一张订单时，后提交者会看到版本冲突提示，刷新后可以重新操作。
+- 指定订单时，收款金额不能超过该订单未结金额；不指定时会按业务时间和创建顺序自动核销。
 
 ## 14. 应用回滚
 
@@ -366,8 +370,8 @@ HTTP 应返回 `308` 并跳转到 HTTPS；HTTPS 登录页应返回 `200`。
 这一步在做什么：把 `latest` 标签重新指向第 6 步保存的旧前端镜像，然后重建前端容器。不会影响数据库。
 
 ```bash
-docker image ls 'claude-ledger-frontend:pre-adjustment-*'
-docker tag "claude-ledger-frontend:pre-adjustment-$release_stamp" claude-ledger-frontend:latest
+docker image ls 'claude-ledger-frontend:pre-payment-*'
+docker tag "claude-ledger-frontend:pre-payment-$release_stamp" claude-ledger-frontend:latest
 cd /root/opt/claude-ledger
 docker compose up -d --no-build --no-deps --force-recreate frontend
 docker compose ps frontend
@@ -377,11 +381,11 @@ docker compose ps frontend
 
 ### 14.2 回滚后端容器
 
-这一步在做什么：恢复旧后端镜像。数据库第 5 版迁移可以暂时保留，旧 API 不会使用新增的调整表。
+这一步在做什么：恢复旧后端镜像。数据库第 6 版迁移可以暂时保留，旧 API 不会使用新增的核销关系表。
 
 ```bash
-docker image ls 'claude-ledger-backend-api:pre-adjustment-*'
-docker tag "claude-ledger-backend-api:pre-adjustment-$release_stamp" claude-ledger-backend-api:latest
+docker image ls 'claude-ledger-backend-api:pre-payment-*'
+docker tag "claude-ledger-backend-api:pre-payment-$release_stamp" claude-ledger-backend-api:latest
 cd /root/opt/claude-ledger-backend
 docker compose up -d --no-build --no-deps --force-recreate api
 curl -fsS http://127.0.0.1:8080/health
@@ -389,14 +393,14 @@ curl -fsS http://127.0.0.1:8080/health
 
 ### 14.3 数据库回滚原则
 
-如果上线后没有产生任何补料/退料数据，可以在确认备份有效后执行：
+如果上线后没有产生任何独立收款数据，可以在确认备份有效后执行：
 
 ```bash
 cd /root/opt/claude-ledger-backend
 docker compose --profile tools run --rm migrate down 1
 ```
 
-如果已经产生真实补料/退料数据，不要直接执行数据库降级。降级会删除调整流水明细。需要完整回到发布前状态时，应停掉 API，并使用第 6 步的 `database.dump` 恢复整个数据库；这会丢失备份之后产生的所有业务数据，必须先与业务人员确认时间窗口。
+如果已经产生真实独立收款数据，不要直接执行数据库降级。降级会删除收款与订单的核销关系，虽然付款和应收流水仍在，但订单级追溯会丢失。需要完整回到发布前状态时，应停掉 API，并使用第 6 步的 `database.dump` 恢复整个数据库；这会丢失备份之后产生的所有业务数据，必须先与业务人员确认时间窗口。
 
 ## 15. 发布成功后的记录与清理
 
@@ -416,9 +420,9 @@ mv /root/opt/claude-ledger-backend.bundle "$backup_dir/"
 
 最终确认：
 
-- 前端提交历史包含功能提交 `0d8779b`（部署文档提交可能位于它之后）。
-- 后端提交为 `b113cfe`。
-- 数据库迁移版本为 `5`。
+- 前端提交历史包含 `feat: add order-specific payment allocation`。
+- 后端提交历史包含 `feat: add independent payment allocation`。
+- 数据库迁移版本为 `6`。
 - 前端容器为 `healthy`，后端 `/health` 正常。
 - 公网 HTTPS 正常。
-- 至少完成一次真实补料与退料验收。
+- 至少完成一次指定订单部分结款和一次自动核销验收。

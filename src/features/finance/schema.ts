@@ -9,15 +9,19 @@ export const paymentInputSchema = z.object({
   workerId: z.string().min(1, '请选择油漆工'), amount: moneyInputSchema,
   paymentMethod: paymentMethodSchema, occurredAt: z.string().min(1, '请选择收款时间'),
   note: z.string().trim().max(200).default(''),
+  allocations: z.array(z.object({ orderId: z.string().min(1), amount: moneyInputSchema })).optional().default([]),
 });
-export const prepaidInputSchema = paymentInputSchema.omit({ paymentMethod: true }).extend({ paymentMethod: paymentMethodSchema });
+export const prepaidInputSchema = paymentInputSchema.omit({ paymentMethod: true, allocations: true }).extend({ paymentMethod: paymentMethodSchema });
 
 const financeRecordBase = z.object({
   id: z.string(), transactionNo: z.string(), workerId: z.string(), workerName: z.string(),
   amount: z.string(), paymentMethod: paymentMethodSchema, occurredAt: z.string(),
   note: z.string(), operatorName: z.string(), createdAt: z.string(),
 });
-export const paymentSchema = financeRecordBase.extend({ receivableBefore: z.string(), receivableAfter: z.string() });
+export const paymentSchema = financeRecordBase.extend({
+  receivableBefore: z.string(), receivableAfter: z.string(), unallocatedAmount: z.string().default('0.00'),
+  allocations: z.array(z.object({ orderId: z.string(), orderNo: z.string(), amount: z.string() })).default([]),
+});
 export const prepaidSchema = financeRecordBase.extend({ balanceBefore: z.string(), balanceAfter: z.string() });
 export const paymentPageSchema = pageMetaSchema.extend({ items: z.array(paymentSchema) });
 export const prepaidPageSchema = pageMetaSchema.extend({ items: z.array(prepaidSchema) });

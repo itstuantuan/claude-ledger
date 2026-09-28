@@ -31,11 +31,12 @@ export function applyMockOrderReturn(orderId:string,amount:bigint,receivableLimi
   replaceOrder({...order,returnedAmount:fromMinorUnits(returned),outstandingAmount:fromMinorUnits(nextOutstanding),status:returned>=toMinorUnits(order.finalAmount)?'REVERSED':nextStatus(order,nextOutstanding,returned)});
   return reduction;
 }
-export function applyMockWorkerPayment(workerId:string,amount:bigint){
+export function applyMockWorkerPayment(workerId:string,amount:bigint,specified:{orderId:string;amount:bigint}[]=[]){
   let remaining=amount;
-  const candidates=orders.filter((item)=>item.workerId===workerId&&toMinorUnits(item.outstandingAmount)>0n).sort((a,b)=>a.occurredAt.localeCompare(b.occurredAt));
-  for(const order of candidates){if(remaining===0n)break;const outstanding=toMinorUnits(order.outstandingAmount);const applied=remaining<outstanding?remaining:outstanding;remaining-=applied;const nextOutstanding=outstanding-applied;const settled=toMinorUnits(order.settledAmount)+applied;replaceOrder({...order,settledAmount:fromMinorUnits(settled),outstandingAmount:fromMinorUnits(nextOutstanding),status:nextStatus({...order,settledAmount:fromMinorUnits(settled)},nextOutstanding)});}
-  return amount-remaining;
+  const allocations:{orderId:string;orderNo:string;amount:string}[]=[];
+  const candidates=specified.length?specified.map(item=>orders.find(order=>order.id===item.orderId)).filter((item):item is Order=>!!item):orders.filter((item)=>item.workerId===workerId&&toMinorUnits(item.outstandingAmount)>0n).sort((a,b)=>a.occurredAt.localeCompare(b.occurredAt));
+  for(const order of candidates){if(remaining===0n)break;const requested=specified.find(item=>item.orderId===order.id)?.amount;const outstanding=toMinorUnits(order.outstandingAmount);const applied=requested??(remaining<outstanding?remaining:outstanding);remaining-=applied;const nextOutstanding=outstanding-applied;const settled=toMinorUnits(order.settledAmount)+applied;replaceOrder({...order,settledAmount:fromMinorUnits(settled),outstandingAmount:fromMinorUnits(nextOutstanding),status:nextStatus({...order,settledAmount:fromMinorUnits(settled)},nextOutstanding)});allocations.push({orderId:order.id,orderNo:order.orderNo,amount:fromMinorUnits(applied)});}
+  return {applied:amount-remaining,allocations};
 }
 
 function quantityMilli(value:string) {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { sessionSchema } from '../src/features/auth/schema';
+import { paymentSchema } from '../src/features/finance/schema';
 import { orderSchema } from '../src/features/orders/schema';
 import { handleMockAuth } from '../src/mocks/auth-service';
 import { handleMockFinance } from '../src/mocks/finance-service';
@@ -31,6 +32,9 @@ test('payments and confirmed returns update the original order settlement snapsh
 
   const payment=await handleMockFinance(request('payments','POST',session.accessToken,{workerId:'w-1',amount:'10.00',paymentMethod:'CASH',occurredAt:'2026-09-22',note:''}),'payments');
   assert.equal(payment.status,201);
+  const paymentRecord=paymentSchema.parse(await payment.json());
+  assert.equal(paymentRecord.allocations[0]?.orderId,order.id);
+  assert.equal(paymentRecord.allocations[0]?.amount,'10.00');
   assert.equal(findMockOrder(order.id)?.settledAmount,'10.00');
   assert.equal(findMockOrder(order.id)?.outstandingAmount,'26.00');
   assert.equal(findMockOrder(order.id)?.status,'PARTIALLY_PAID');
@@ -40,4 +44,15 @@ test('payments and confirmed returns update the original order settlement snapsh
   assert.equal(findMockOrder(order.id)?.returnedAmount,'18.00');
   assert.equal(findMockOrder(order.id)?.outstandingAmount,'8.00');
   assert.equal(orderSchema.safeParse(findMockOrder(order.id)).success,true);
+
+  const secondResponse=await handleMockOrders(request('orders','POST',session.accessToken,{
+    workerId:'w-1',projectId:null,occurredAt:'2026-09-23',items:[{materialId:'m-8',quantity:'1',unitPrice:'20.00',discount:'0.00'}],paymentAmount:'0.00',prepaidDeduction:'0.00',paymentMethod:null,note:'指定核销测试',
+  }));
+  const second=orderSchema.parse(await secondResponse.json());
+  const specified=await handleMockFinance(request('payments','POST',session.accessToken,{workerId:'w-1',amount:'5.00',paymentMethod:'WECHAT',occurredAt:'2026-09-24',note:'指定第二单',allocations:[{orderId:second.id,amount:'5.00'}]}),'payments');
+  assert.equal(specified.status,201);
+  const specifiedRecord=paymentSchema.parse(await specified.json());
+  assert.equal(specifiedRecord.allocations[0]?.orderId,second.id);
+  assert.equal(findMockOrder(order.id)?.outstandingAmount,'8.00');
+  assert.equal(findMockOrder(second.id)?.outstandingAmount,'15.00');
 });

@@ -92,8 +92,8 @@ FinancialTransaction     无
 
 ## 5. 独立收款
 
-- 前端当前 PaymentInput 没有 orderId；V1 兼容行为：先减少客户总应收，再按订单业务时间/创建顺序 FIFO 生成 `payment_allocations`。
-- 收款不得超过客户当前应收；否则返回 `PAYMENT_EXCEEDS_RECEIVABLE`，不能制造负应收，也不能擅自把超额转预存。
+- PaymentInput 可选传入 `allocations`。为空时按订单业务时间/创建顺序 FIFO 核销；指定时只核销所选订单，可部分结款，但分配合计必须等于本次收款金额。
+- 收款不得超过客户当前应收，指定金额也不得超过该订单未结金额；不能制造负应收，也不能擅自把超额转预存。
 - 分录：Ledger `PAYMENT -amount`；FinancialTransaction `INCOME +amount`；不改预存。
 - Payment、Ledger、FinancialTransaction、allocations、汇总余额、审计和幂等结果必须同一事务提交。
 

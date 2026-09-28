@@ -30,7 +30,7 @@
 | Material | category/brand/specification/unit, defaultPrice/costPrice, salesCount, version | 分类和品牌当前均为字符串，无独立 Category/Brand API |
 | PricingItem | materialId, defaultPrice, customerPrice, effectivePrice | 当前客户价无有效期字段，批量 PATCH 保存 |
 | Order | 行项目、三项结算、三项后续结算快照、status | 创建时一次性结算；后续付款/退料会更新订单展示快照 |
-| Payment | amount/method, receivableBefore/After | 独立收款，不带 orderId；Mock 自动 FIFO 分配到未结订单 |
+| Payment | amount/method, receivableBefore/After, allocations | 独立收款可自动 FIFO 核销，也可指定一张未结订单部分或全部结款 |
 | Prepaid | amount/method, balanceBefore/After | 当前仅实现充值，不含退款/调整/冲正 API |
 | Return | original order、行项目、amount、receivableReduction、status | Clerk 申请为 PENDING；有确认权限者创建即 CONFIRMED；当前仅冲应收 |
 | LedgerStatement | 期初、四类发生额、期末、逐笔余额 | 页面模型只含 ORDER/PAYMENT/RETURN，无 ADJUSTMENT/REVERSAL |
@@ -170,7 +170,7 @@ GORM Model 不直接 JSON 输出。响应 DTO 必须保留现有 camelCase、nul
 
 1. **Ledger 基线不可追溯。** Mock 由 `worker.receivable - 当前内存业务净发生额` 反推 baseline，Seed 应收没有来源单据。正式库必须用 opening adjustment/migration ledger 显式入账，否则“为什么欠款”无法回答。兼容方案：Worker 响应不变，迁移时为每个期初余额生成 `OPENING_BALANCE` LedgerEntry。
 2. **退料结算 Contract 缺字段。** `ReturnInput` 没有 settlementType，现有行为只在可冲额度内冲应收，超出部分不进入现金或预存。无法实现 CASH_REFUND/PREPAID_REFUND。兼容方案：V1 后端先严格保持 CREDIT_RECEIVABLE；新增方式需要前端字段与页面后再开放。
-3. **收款分配语义隐式。** PaymentInput 没有 orderId，Mock 自动按订单 occurredAt FIFO 核销；Payment 响应也不暴露分配。后果是用户无法解释某张单为何结清。兼容方案：保留现有请求，正式后端创建 `payment_allocations` 并按明确 FIFO 分配；未来可增加可选 orderId/allocations，响应保持兼容。
+3. **收款分配已显式化。** PaymentInput 的 `allocations` 为空时按订单 occurredAt/createdAt FIFO 核销；传入时按指定订单核销。Payment 响应返回分配明细，`payment_allocations` 持久保存收款与订单的对应关系。
 4. **OpenAPI 不完整。** 仅 Auth/Ledger/Dashboard 有描述，无法作为 Go 全量生成合同。Phase 1 前应将本文 api-contract 的既有端点补入 OpenAPI，但不得改变前端字段。
 
 ### HIGH
@@ -203,6 +203,6 @@ GORM Model 不直接 JSON 输出。响应 DTO 必须保留现有 camelCase、nul
 
 - Phase 1–3 基础设施、Auth、客户、材料：**不需要**改现有字段。
 - Phase 4 快速开单：可先兼容，但“手工价授权/原因”若业务要求可追溯，需要新增可选字段或独立审计输入。
-- Phase 5 独立收款：可后端透明实现 FIFO allocations，前端无需立即改；若要指定订单则需增强 UI。
+- Phase 5 独立收款：已实现自动 FIFO 与指定订单两种核销方式；指定订单支持部分结款，并由前端展示分配明细。
 - Phase 6 退料：实现三种结算方式前**需要**前端新增 settlementType 及对应权限/提示；不能由后端猜。
 - 冲正、预存退款、账务调整：当前无 API/UI，需新 Contract，经确认后再做。
