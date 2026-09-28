@@ -8,3 +8,5 @@ out/
 *.log
 
 .npm-cache/
+
+certificates

@@ -1,86 +1,1285 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { useFieldArray, useForm, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronUp, Copy, Minus, Plus, Search, Trash2 } from 'lucide-react';
-import Link from 'next/link';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { ErrorState, LoadingState } from '@/components/common/error-state';
-import { workersApi, projectsApi, teamsApi } from '@/lib/api/customers';
-import { materialsApi, pricingApi } from '@/lib/api/materials';
-import { ordersApi } from '@/lib/api/orders';
-import { errorMessage } from '@/lib/api/errors';
-import { formatMoney, fromMinorUnits, toMinorUnits } from '@/lib/utils/money';
-import { createIdempotencyKey } from '@/lib/utils/idempotency-key';
-import { formatStoreDate, storeDateTimeInput, toApiDateTime } from '@/lib/utils/datetime';
-import { WorkerForm } from '@/features/customers/forms';
-import { MaterialForm } from '@/features/materials/materials-page';
-import type { Worker } from '@/features/customers/schema';
-import type { Material } from '@/features/materials/schema';
-import { orderInputSchema, type Order, type OrderInput, type PaymentMethod } from './schema';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Minus,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ErrorState, LoadingState } from "@/components/common/error-state";
+import { workersApi, projectsApi, teamsApi } from "@/lib/api/customers";
+import { materialsApi, pricingApi } from "@/lib/api/materials";
+import { ordersApi } from "@/lib/api/orders";
+import { errorMessage } from "@/lib/api/errors";
+import { formatMoney, fromMinorUnits, toMinorUnits } from "@/lib/utils/money";
+import { createIdempotencyKey } from "@/lib/utils/idempotency-key";
+import {
+  formatStoreDate,
+  storeDateTimeInput,
+  toApiDateTime,
+} from "@/lib/utils/datetime";
+import { WorkerForm } from "@/features/customers/forms";
+import { MaterialForm } from "@/features/materials/materials-page";
+import type { Worker } from "@/features/customers/schema";
+import type { Material } from "@/features/materials/schema";
+import {
+  orderInputSchema,
+  type Order,
+  type OrderInput,
+  type PaymentMethod,
+} from "./schema";
 
-const paymentOptions:Array<{value:'ACCOUNT'|PaymentMethod;label:string}>=[{value:'ACCOUNT',label:'记账'},{value:'WECHAT',label:'微信'},{value:'ALIPAY',label:'支付宝'},{value:'CASH',label:'现金'},{value:'BANK_CARD',label:'银行卡'},{value:'OTHER',label:'其他'}];
-const localNow=storeDateTimeInput;
-const defaults=():OrderInput=>({workerId:'',projectId:null,projectName:null,occurredAt:localNow(),items:[],paymentAmount:'0.00',prepaidDeduction:'0.00',paymentMethod:null,note:''});
-function qMilli(value:string){if(!/^\d+(?:\.\d{1,3})?$/.test(value))return 0n;const [w,f='']=value.split('.');return BigInt(w)*1000n+BigInt(f.padEnd(3,'0'));}
-function money(value?:string){try{return toMinorUnits(value||'0');}catch{return 0n;}}
-function calculate(items:Array<OrderInput['items'][number]|undefined>){let goods=0n,discount=0n,count=0;for(const item of items){if(!item)continue;goods+=(money(item.unitPrice)*qMilli(item.quantity)+500n)/1000n;discount+=money(item.discount);count+=Number(item.quantity)||0;}return {goods,discount,final:goods>discount?goods-discount:0n,count};}
-const numberText=(value:number)=>Number.isInteger(value)?String(value):String(Math.round(value*1000)/1000);
-const dateText=(value?:string|null)=>value?formatStoreDate(value).slice(5):'暂无';
+const paymentOptions: Array<{
+  value: "ACCOUNT" | PaymentMethod;
+  label: string;
+}> = [
+  { value: "ACCOUNT", label: "记账" },
+  { value: "WECHAT", label: "微信" },
+  { value: "ALIPAY", label: "支付宝" },
+  { value: "CASH", label: "现金" },
+  { value: "BANK_CARD", label: "银行卡" },
+  { value: "OTHER", label: "其他" },
+];
+const localNow = storeDateTimeInput;
+const defaults = (): OrderInput => ({
+  workerId: "",
+  projectId: null,
+  projectName: null,
+  occurredAt: localNow(),
+  items: [],
+  paymentAmount: "0.00",
+  prepaidDeduction: "0.00",
+  paymentMethod: null,
+  note: "",
+});
+function qMilli(value: string) {
+  if (!/^\d+(?:\.\d{1,3})?$/.test(value)) return 0n;
+  const [w, f = ""] = value.split(".");
+  return BigInt(w) * 1000n + BigInt(f.padEnd(3, "0"));
+}
+function money(value?: string) {
+  try {
+    return toMinorUnits(value || "0");
+  } catch {
+    return 0n;
+  }
+}
+function calculate(items: Array<OrderInput["items"][number] | undefined>) {
+  let goods = 0n,
+    discount = 0n,
+    count = 0;
+  for (const item of items) {
+    if (!item) continue;
+    goods += (money(item.unitPrice) * qMilli(item.quantity) + 500n) / 1000n;
+    discount += money(item.discount);
+    count += Number(item.quantity) || 0;
+  }
+  return {
+    goods,
+    discount,
+    final: goods > discount ? goods - discount : 0n,
+    count,
+  };
+}
+const numberText = (value: number) =>
+  Number.isInteger(value)
+    ? String(value)
+    : String(Math.round(value * 1000) / 1000);
+const dateText = (value?: string | null) =>
+  value ? formatStoreDate(value).slice(5) : "暂无";
 
-function CustomerSelector({workers,selected,onSelect,onCreate}:{workers:Worker[];selected?:Worker;onSelect:(worker?:Worker)=>void;onCreate:()=>void}){
-  const [query,setQuery]=useState('');const [open,setOpen]=useState(false);const [cursor,setCursor]=useState(0);const ref=useRef<HTMLInputElement>(null);
-  const recent=useMemo(()=>[...workers].sort((a,b)=>(b.lastTransactionAt||'').localeCompare(a.lastTransactionAt||'')).slice(0,4),[workers]);
-  const matches=useMemo(()=>workers.filter(x=>`${x.name}${x.phone}${x.wechat||''}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0,8),[workers,query]);
-  useEffect(()=>{if(!selected)requestAnimationFrame(()=>ref.current?.focus());},[selected]);
-  const choose=(worker:Worker)=>{onSelect(worker);setQuery('');setOpen(false);};
-  const onKeyDown=(event:ReactKeyboardEvent<HTMLInputElement>)=>{if(event.key==='ArrowDown'){event.preventDefault();setOpen(true);setCursor(v=>Math.min(v+1,matches.length-1));}else if(event.key==='ArrowUp'){event.preventDefault();setOpen(true);setCursor(v=>Math.max(v-1,0));}else if(event.key==='Enter'&&!event.nativeEvent.isComposing){event.preventDefault();if(open&&matches[cursor])choose(matches[cursor]);else if(matches.length)setOpen(true);}else if(event.key==='Escape')setOpen(false);};
-  if(selected)return <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/10 px-5 py-4"><div className="flex min-w-0 items-center gap-5"><span className="grid size-9 place-items-center rounded-full bg-[#ecece8] text-sm font-medium">{selected.name[0]}</span><div><strong className="text-[15px] font-medium">{selected.name}</strong><span className="ml-2 text-xs text-[#8a8985]">{selected.phone}</span></div><div className="hidden gap-6 text-xs min-[760px]:flex"><span className="text-[#77756e]">当前欠款 <b className="ml-1 font-medium tabular-nums text-[#a34e40]">{formatMoney(selected.receivable)}</b></span><span className="text-[#77756e]">最近开单 <b className="ml-1 font-medium text-[#22211f]">{dateText(selected.lastTransactionAt)}</b></span><span className="text-[#77756e]">累计拿货 <b className="ml-1 font-medium tabular-nums text-[#22211f]">{formatMoney(selected.materialTotal)}</b></span></div></div><Button type="button" variant="ghost" onClick={()=>onSelect()}>更换</Button></div>;
-  return <div className="border-b border-black/10 px-5 py-4"><div className="relative max-w-[680px]"><label className="flex h-11 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-[#8a8985] focus-within:border-[#7f95a9] focus-within:ring-[3px] focus-within:ring-[#6289ab26]"><Search size={17}/><input ref={ref} className="h-full min-w-0 flex-1 border-0 bg-transparent text-sm text-[#11110f] outline-none" placeholder="输入姓名 / 手机号搜索油漆工…" value={query} onFocus={()=>{if(query.trim())setOpen(true);}} onBlur={()=>setTimeout(()=>setOpen(false),120)} onChange={e=>{const value=e.target.value;setQuery(value);setCursor(0);setOpen(Boolean(value.trim()));}} onKeyDown={onKeyDown}/><kbd className="text-[10px] text-[#aaa9a4]">↑↓ Enter</kbd></label>{open&&<div className="absolute left-0 top-12 z-40 max-h-72 w-full overflow-auto rounded-[10px] border border-black/10 bg-[#fcfcfb] p-1 shadow-[0_14px_45px_#0000001f]">{matches.length?matches.map((worker,index)=><button key={worker.id} type="button" className={`flex w-full items-center justify-between rounded-lg border-0 px-3 py-2.5 text-left ${index===cursor?'bg-[#e9e8e5]':'bg-transparent hover:bg-[#f1f1ef]'}`} onMouseDown={e=>e.preventDefault()} onMouseEnter={()=>setCursor(index)} onClick={()=>choose(worker)}><span><strong className="block text-[13px] font-medium">{worker.name}</strong><small className="mt-1 block text-[11px] text-[#8a8985]">{worker.phone} · {worker.teamName||'独立油漆工'}</small></span><span className="text-xs tabular-nums text-[#77756e]">欠款 {formatMoney(worker.receivable)}</span></button>):<button type="button" className="w-full rounded-lg border-0 bg-transparent px-3 py-3 text-left text-xs hover:bg-[#f1f1ef]" onMouseDown={e=>e.preventDefault()} onClick={onCreate}><Plus className="mr-1 inline" size={14}/>新建油漆工“{query||'客户'}”</button>}</div>}</div>{!query&&<div className="mt-3 flex flex-wrap items-center gap-2"><span className="mr-1 text-[11px] text-[#8a8985]">最近开单</span>{recent.map(worker=><button key={worker.id} type="button" className="rounded-full border border-black/10 bg-[#fafaf8] px-3 py-1.5 text-xs hover:bg-[#efeeeb]" onClick={()=>choose(worker)}>{worker.name}</button>)}</div>}</div>;
+function CustomerSelector({
+  workers,
+  selected,
+  onSelect,
+  onCreate,
+}: {
+  workers: Worker[];
+  selected?: Worker;
+  onSelect: (worker?: Worker) => void;
+  onCreate: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const ref = useRef<HTMLInputElement>(null);
+  const recent = useMemo(
+    () =>
+      [...workers]
+        .sort((a, b) =>
+          (b.lastTransactionAt || "").localeCompare(a.lastTransactionAt || ""),
+        )
+        .slice(0, 4),
+    [workers],
+  );
+  const matches = useMemo(
+    () =>
+      workers
+        .filter((x) =>
+          `${x.name}${x.phone}${x.wechat || ""}`
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+        )
+        .slice(0, 8),
+    [workers, query],
+  );
+  useEffect(() => {
+    if (!selected && window.matchMedia("(pointer: fine)").matches) requestAnimationFrame(() => ref.current?.focus());
+  }, [selected]);
+  const choose = (worker: Worker) => {
+    onSelect(worker);
+    setQuery("");
+    setOpen(false);
+  };
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setOpen(true);
+      setCursor((v) => Math.min(v + 1, matches.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setOpen(true);
+      setCursor((v) => Math.max(v - 1, 0));
+    } else if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      if (open && matches[cursor]) choose(matches[cursor]);
+      else if (matches.length) setOpen(true);
+    } else if (event.key === "Escape") setOpen(false);
+  };
+  if (selected)
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/10 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-5">
+          <span className="grid size-9 place-items-center rounded-full bg-[#ecece8] text-sm font-medium">
+            {selected.name[0]}
+          </span>
+          <div>
+            <strong className="text-[15px] font-medium">{selected.name}</strong>
+            <span className="ml-2 text-xs text-[#8a8985]">
+              {selected.phone}
+            </span>
+          </div>
+          <div className="hidden gap-6 text-xs min-[760px]:flex">
+            <span className="text-[#77756e]">
+              当前欠款{" "}
+              <b className="ml-1 font-medium tabular-nums text-[#a34e40]">
+                {formatMoney(selected.receivable)}
+              </b>
+            </span>
+            <span className="text-[#77756e]">
+              最近开单{" "}
+              <b className="ml-1 font-medium text-[#22211f]">
+                {dateText(selected.lastTransactionAt)}
+              </b>
+            </span>
+            <span className="text-[#77756e]">
+              累计拿货{" "}
+              <b className="ml-1 font-medium tabular-nums text-[#22211f]">
+                {formatMoney(selected.materialTotal)}
+              </b>
+            </span>
+          </div>
+        </div>
+        <Button type="button" variant="ghost" onClick={() => onSelect()}>
+          更换
+        </Button>
+      </div>
+    );
+  return (
+    <div className="border-b border-black/10 px-5 py-4">
+      <div className="relative max-w-[680px]">
+        <label className="flex h-11 items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-[#8a8985] focus-within:border-[#7f95a9] focus-within:ring-[3px] focus-within:ring-[#6289ab26]">
+          <Search size={17} />
+          <input
+            ref={ref}
+            className="h-full min-w-0 flex-1 border-0 bg-transparent text-sm text-[#11110f] outline-none"
+            placeholder="输入姓名 / 手机号搜索油漆工…"
+            value={query}
+            onFocus={() => {
+              if (query.trim()) setOpen(true);
+            }}
+            onBlur={() => setTimeout(() => setOpen(false), 120)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setQuery(value);
+              setCursor(0);
+              setOpen(Boolean(value.trim()));
+            }}
+            onKeyDown={onKeyDown}
+          />
+          <kbd className="text-[10px] text-[#aaa9a4]">↑↓ Enter</kbd>
+        </label>
+        {open && (
+          <div className="absolute left-0 top-12 z-40 max-h-72 w-full overflow-auto rounded-[10px] border border-black/10 bg-[#fcfcfb] p-1 shadow-[0_14px_45px_#0000001f]">
+            {matches.length ? (
+              matches.map((worker, index) => (
+                <button
+                  key={worker.id}
+                  type="button"
+                  className={`flex w-full items-center justify-between rounded-lg border-0 px-3 py-2.5 text-left ${index === cursor ? "bg-[#e9e8e5]" : "bg-transparent hover:bg-[#f1f1ef]"}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setCursor(index)}
+                  onClick={() => choose(worker)}
+                >
+                  <span>
+                    <strong className="block text-[13px] font-medium">
+                      {worker.name}
+                    </strong>
+                    <small className="mt-1 block text-[11px] text-[#8a8985]">
+                      {worker.phone} · {worker.teamName || "独立油漆工"}
+                    </small>
+                  </span>
+                  <span className="text-xs tabular-nums text-[#77756e]">
+                    欠款 {formatMoney(worker.receivable)}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <button
+                type="button"
+                className="w-full rounded-lg border-0 bg-transparent px-3 py-3 text-left text-xs hover:bg-[#f1f1ef]"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={onCreate}
+              >
+                <Plus className="mr-1 inline" size={14} />
+                新建油漆工“{query || "客户"}”
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {!query && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[11px] text-[#8a8985]">最近开单</span>
+          {recent.map((worker) => (
+            <button
+              key={worker.id}
+              type="button"
+              className="rounded-full border border-black/10 bg-[#fafaf8] px-3 py-1.5 text-xs hover:bg-[#efeeeb]"
+              onClick={() => choose(worker)}
+            >
+              {worker.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function ProjectSelector({projects,form}:{projects:Array<{id:string;name:string;address:string}>;form:ReturnType<typeof useForm<OrderInput>>}){return <div className="flex flex-wrap items-center gap-3 border-b border-black/10 bg-[#fafaf8] px-5 py-3"><span className="shrink-0 text-[11px] font-medium text-[#66645f]">本单工地</span><select className="h-9 min-w-52 rounded-lg border border-black/15 bg-white px-3 text-xs text-[#22211f]" {...form.register('projectId',{setValueAs:value=>value||null,onChange:()=>form.setValue('projectName',null)})}><option value="">选择已有工地</option>{projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</select><span className="text-[10px] text-[#9a9994]">或</span><Input className="h-9 min-w-56 max-w-80 flex-1 text-xs" placeholder="直接输入临时工地名称" {...form.register('projectName',{setValueAs:value=>typeof value==='string'?(value.trim()||null):null,onChange:event=>{if(event.target.value)form.setValue('projectId',null);}})}/></div>;}
-
-function QuantityInput({value,unit,onChange,onConfirm}:{value:string;unit:string;onChange:(value:string)=>void;onConfirm:()=>void}){const step=(delta:number)=>onChange(numberText(Math.max(.001,(Number(value)||0)+delta)));return <div className="flex h-9 w-[142px] items-center rounded-lg border border-black/15 bg-white"><button type="button" className="grid h-full w-8 place-items-center border-0 bg-transparent hover:bg-[#f0efec]" onClick={()=>step(-1)} aria-label="减少数量"><Minus size={13}/></button><input className="h-full min-w-0 flex-1 border-x border-y-0 border-black/10 bg-transparent text-center text-xs tabular-nums outline-none" inputMode="decimal" value={value} onChange={e=>onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing){e.preventDefault();onConfirm();}}}/><button type="button" className="grid h-full w-8 place-items-center border-0 bg-transparent hover:bg-[#f0efec]" onClick={()=>step(1)} aria-label="增加数量"><Plus size={13}/></button><span className="w-8 text-center text-[10px] text-[#8a8985]">{unit}</span></div>;}
-
-function SuccessPanel({order,worker,onContinue,onNew}:{order:Order;worker?:Worker;onContinue:()=>void;onNew:()=>void}){const debt=money(worker?.receivable)+money(order.addedReceivable);return <Dialog open onOpenChange={open=>{if(!open)onContinue();}}><DialogContent className="max-w-[560px]"><div className="mb-2 grid size-11 place-items-center rounded-full bg-[#e7eee3] text-[#4f7045]"><Check size={22}/></div><DialogTitle>开单成功</DialogTitle><DialogDescription>{order.workerName} · {order.orderNo}</DialogDescription><div className="grid grid-cols-2 gap-3 rounded-xl bg-[#f5f5f2] p-4"><div><span className="text-xs text-[#77756e]">本单金额</span><strong className="mt-1 block text-xl font-medium tabular-nums">{formatMoney(order.finalAmount)}</strong></div><div><span className="text-xs text-[#77756e]">开单后欠款</span><strong className="mt-1 block text-xl font-medium tabular-nums text-[#a34e40]">{formatMoney(fromMinorUnits(debt))}</strong></div></div><div className="mt-5 grid grid-cols-2 gap-2"><Button onClick={onContinue}>继续给{order.workerName}开单</Button><Button variant="outline" onClick={onNew}>开新单</Button><Button asChild variant="outline"><Link href={`/orders?workerId=${order.workerId}`}>查看账单</Link></Button><Button variant="outline" onClick={()=>window.print()}>打印 / 导出</Button></div></DialogContent></Dialog>;}
-
-export function OrderCreatePage(){
-  const [workerForm,setWorkerForm]=useState(false),[materialForm,setMaterialForm]=useState(false),[advanced,setAdvanced]=useState(false),[materialSearch,setMaterialSearch]=useState(''),[materialOpen,setMaterialOpen]=useState(false),[materialCursor,setMaterialCursor]=useState(0),[paymentMode,setPaymentMode]=useState<'ACCOUNT'|PaymentMethod>('ACCOUNT'),[created,setCreated]=useState<Order>(),[pendingWorker,setPendingWorker]=useState<Worker|null>(),[flashId,setFlashId]=useState('');
-  const materialRef=useRef<HTMLInputElement>(null);const form=useForm<OrderInput>({resolver:zodResolver(orderInputSchema),defaultValues:defaults()});const fields=useFieldArray({control:form.control,name:'items'});const workerId=useWatch({control:form.control,name:'workerId'});const occurredAt=useWatch({control:form.control,name:'occurredAt'});const items=useWatch({control:form.control,name:'items',defaultValue:[]});const paymentAmount=useWatch({control:form.control,name:'paymentAmount'})||'0.00';const prepaidDeduction=useWatch({control:form.control,name:'prepaidDeduction'})||'0.00';const [picked,setPicked]=useState<Record<string,Material>>({});
-  const validPricingTime=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(occurredAt||'');
-  const pricingAt=validPricingTime?toApiDateTime(occurredAt):'';
-  const workers=useQuery({queryKey:['workers','order-options'],queryFn:({signal})=>workersApi.list({pageSize:50,status:'ACTIVE'},signal)}),projects=useQuery({queryKey:['projects','order-options'],queryFn:({signal})=>projectsApi.list({pageSize:50,status:'ACTIVE'},signal)}),teams=useQuery({queryKey:['teams','order-options'],queryFn:({signal})=>teamsApi.list({pageSize:50},signal)}),materials=useQuery({queryKey:['materials','order-options'],queryFn:({signal})=>materialsApi.list({pageSize:50,status:'ACTIVE'},signal)}),orders=useQuery({queryKey:['orders','quick-order-history'],queryFn:({signal})=>ordersApi.list({pageSize:50},signal)}),pricing=useQuery({queryKey:['pricing',workerId,pricingAt],queryFn:({signal})=>pricingApi.list(workerId,{at:pricingAt},signal),enabled:!!workerId&&validPricingTime});
-  const previousEffectivePrices=useRef<Record<string,string>>({});
-  const selectedWorker=workers.data?.items.find(x=>x.id===workerId);const workerOrders=useMemo(()=>orders.data?.items.filter(x=>x.workerId===workerId).sort((a,b)=>b.occurredAt.localeCompare(a.occurredAt))||[],[orders.data,workerId]);const lastOrder=workerOrders[0];const totals=calculate(items);const remaining=totals.final-money(paymentAmount)-money(prepaidDeduction);const afterDebt=money(selectedWorker?.receivable)+(remaining>0n?remaining:0n);
-  const frequent=useMemo(()=>{const scores=new Map<string,number>();workerOrders.forEach((order,i)=>order.items.forEach(item=>scores.set(item.materialId,(scores.get(item.materialId)||0)+Math.max(1,8-i))));return [...(materials.data?.items||[])].sort((a,b)=>(scores.get(b.id)||b.salesCount)-(scores.get(a.id)||a.salesCount)).slice(0,5);},[materials.data,workerOrders]);
-  const filtered=useMemo(()=>{const q=materialSearch.trim().toLowerCase();return (materials.data?.items||[]).filter(x=>!q||`${x.name}${x.brand}${x.specification}${x.category}`.toLowerCase().includes(q)).sort((a,b)=>q?0:b.salesCount-a.salesCount).slice(0,8);},[materials.data,materialSearch]);
-  const reset=(keepWorker=false)=>{const id=keepWorker?form.getValues('workerId'):'';form.reset({...defaults(),workerId:id});fields.replace([]);setPicked({});setPaymentMode('ACCOUNT');setAdvanced(false);setMaterialSearch('');};
-  const selectWorker=(worker?:Worker)=>{if(!worker){if(items.length)setPendingWorker(null);else form.setValue('workerId','');return;}if(worker.id!==workerId&&items.length){setPendingWorker(worker);return;}form.setValue('workerId',worker.id,{shouldValidate:true});form.setValue('projectId',null);form.setValue('projectName',null);setTimeout(()=>materialRef.current?.focus(),80);};
-  const price=(material:Material)=>pricing.data?.find(x=>x.materialId===material.id)?.effectivePrice||material.defaultPrice;
-  const flash=(id:string)=>{setFlashId(id);window.setTimeout(()=>setFlashId(value=>value===id?'':value),550);};
-  const add=(material:Material)=>{const index=form.getValues('items').findIndex(x=>x.materialId===material.id);if(index>=0){form.setValue(`items.${index}.quantity`,numberText((Number(form.getValues(`items.${index}.quantity`))||0)+1),{shouldDirty:true,shouldValidate:true});flash(material.id);}else{setPicked(x=>({...x,[material.id]:material}));fields.append({materialId:material.id,quantity:'1',unitPrice:price(material),discount:'0.00'},{shouldFocus:false});flash(material.id);}setMaterialSearch('');setMaterialOpen(true);setMaterialCursor(0);requestAnimationFrame(()=>materialRef.current?.focus());};
-  const copyPrevious=()=>{if(!lastOrder)return;const active=materials.data?.items||[];const next=lastOrder.items.filter(item=>active.some(x=>x.id===item.materialId)).map(item=>{const material=active.find(x=>x.id===item.materialId)!;return {materialId:item.materialId,quantity:item.quantity,unitPrice:price(material),discount:'0.00'};});fields.replace(next);setPicked(Object.fromEntries(active.filter(x=>next.some(row=>row.materialId===x.id)).map(x=>[x.id,x])));toast.success('已复制上一单，可直接调整数量');};
-  const choosePayment=(value:'ACCOUNT'|PaymentMethod)=>{setPaymentMode(value);form.setValue('paymentMethod',value==='ACCOUNT'?null:value);form.setValue('paymentAmount',value==='ACCOUNT'?'0.00':fromMinorUnits(totals.final));};
-  const submit=useMutation({mutationFn:(input:OrderInput)=>ordersApi.create(input,createIdempotencyKey()),onSuccess:order=>{setCreated(order);toast.success(`用料单 ${order.orderNo} 已创建`);},onError:error=>toast.error(errorMessage(error))});
-  const confirm=()=>{void form.handleSubmit(input=>submit.mutate(input),errors=>toast.error(errors.workerId?.message||errors.items?.message||'请检查开单信息'))();};
-  useEffect(()=>{const handler=(event:BeforeUnloadEvent)=>{if(items.length&&!created){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[items.length,created]);
-  useEffect(()=>{if(!pricing.data)return;const next=Object.fromEntries(pricing.data.map(item=>[item.materialId,item.effectivePrice]));form.getValues('items').forEach((line,index)=>{const fallback=materials.data?.items.find(item=>item.id===line.materialId)?.defaultPrice;const previous=previousEffectivePrices.current[line.materialId]??fallback;if(previous&&line.unitPrice===previous&&next[line.materialId]&&next[line.materialId]!==line.unitPrice)form.setValue(`items.${index}.unitPrice`,next[line.materialId],{shouldDirty:true,shouldValidate:true});});previousEffectivePrices.current=next;},[pricing.data,materials.data,form]);
-  useEffect(()=>{const handler=(event:KeyboardEvent)=>{const tag=(event.target as HTMLElement).tagName;if(event.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(tag)){event.preventDefault();materialRef.current?.focus();}if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();confirm();}};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);});
-  if(workers.isPending||materials.isPending||projects.isPending||teams.isPending||orders.isPending)return <LoadingState label="正在准备快速开单…"/>;if(workers.isError||materials.isError||projects.isError||teams.isError||orders.isError)return <ErrorState error={workers.error||materials.error||projects.error||teams.error||orders.error}/>;
-  return <div className="pb-20"><header className="mb-5 flex items-end justify-between gap-4"><div><p className="mb-1.5 text-xs text-[#8a8985]">业务管理 / 快速开单</p><h1 className="font-serif text-[28px] font-medium">快速开单</h1><p className="mt-2 text-[12px] text-[#77756e]">像收银台一样连续录入，按 / 随时回到材料搜索。</p></div><time className="hidden text-xs text-[#77756e] min-[700px]:block">业务日期 {formatStoreDate(form.getValues('occurredAt'))}</time></header><form onSubmit={e=>{e.preventDefault();confirm();}}><section className="overflow-visible rounded-[14px] border border-black/10 bg-white"><CustomerSelector workers={workers.data.items} selected={selectedWorker} onSelect={selectWorker} onCreate={()=>setWorkerForm(true)}/>{selectedWorker&&<><ProjectSelector projects={projects.data.items.filter(project=>project.workerIds.includes(workerId))} form={form}/><div className="border-b border-black/10 px-5 py-3"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-[11px] text-[#8a8985]">{selectedWorker.name}常用</span>{frequent.map(material=><button type="button" key={material.id} className="rounded-lg border border-black/10 bg-[#fafaf8] px-3 py-2 text-left hover:bg-[#efeeeb]" onClick={()=>add(material)}><strong className="block max-w-44 truncate text-xs font-medium">{material.brand} · {material.name}</strong><small className="mt-1 block text-[10px] text-[#8a8985]">{material.specification} · {formatMoney(price(material))}/{material.unit}</small></button>)}{lastOrder&&<button type="button" className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs hover:bg-[#f0efec]" onClick={copyPrevious}><Copy size={13}/>复制上一单 · {dateText(lastOrder.occurredAt)} · {formatMoney(lastOrder.finalAmount)}</button>}</div></div><MaterialEntry search={materialSearch} setSearch={setMaterialSearch} open={materialOpen} setOpen={setMaterialOpen} cursor={materialCursor} setCursor={setMaterialCursor} materials={filtered} price={price} onAdd={add} inputRef={materialRef} loading={pricing.isPending} onCreate={()=>setMaterialForm(true)}/><OrderItems fields={fields.fields} items={items} materials={materials.data.items} picked={picked} flashId={flashId} form={form} remove={fields.remove} onQuantityConfirm={()=>materialRef.current?.focus()}/></>}</section>{selectedWorker&&<><Checkout paymentMode={paymentMode} choosePayment={choosePayment} advanced={advanced} setAdvanced={setAdvanced} form={form} fieldsCount={fields.fields.length} totals={totals} debt={selectedWorker.receivable} afterDebt={afterDebt}/><div className="sticky bottom-0 z-30 mt-4 flex items-center justify-between gap-4 rounded-[14px] border border-black/10 bg-[#fcfcfbf2] px-5 py-3 shadow-[0_-8px_30px_#0000000d] backdrop-blur"><div><span className="text-xs text-[#77756e]">{fields.fields.length} 种材料 · {numberText(totals.count)} 件</span><strong className="ml-4 text-base font-medium tabular-nums">应收 {formatMoney(fromMinorUnits(totals.final))}</strong></div><div className="flex items-center gap-2"><span className="hidden text-[10px] text-[#8a8985] min-[720px]:block">⌘/Ctrl + Enter</span><Button type="submit" className="h-10 px-5" disabled={!fields.fields.length||submit.isPending}>{submit.isPending?'正在开单…':'确认开单'}</Button></div></div></>}</form><WorkerForm open={workerForm} onOpenChange={setWorkerForm} teams={teams.data.items} onSuccess={worker=>selectWorker(worker)}/><MaterialForm open={materialForm} onOpenChange={setMaterialForm} onSuccess={material=>add(material)}/><Dialog open={pendingWorker!==undefined} onOpenChange={open=>{if(!open)setPendingWorker(undefined);}}><DialogContent><DialogTitle>当前订单尚未保存</DialogTitle><DialogDescription>{pendingWorker?'更换客户':'返回客户选择'}会清空已经录入的材料。</DialogDescription><div className="flex justify-end gap-2"><Button variant="outline" onClick={()=>setPendingWorker(undefined)}>继续编辑</Button><Button onClick={()=>{const next=pendingWorker;setPendingWorker(undefined);reset();if(next)form.setValue('workerId',next.id,{shouldValidate:true});}}>放弃订单</Button></div></DialogContent></Dialog>{created&&<SuccessPanel order={created} worker={selectedWorker} onContinue={()=>{setCreated(undefined);reset(true);requestAnimationFrame(()=>materialRef.current?.focus());}} onNew={()=>{setCreated(undefined);reset();}}/>}</div>;
+function ProjectSelector({
+  projects,
+  form,
+}: {
+  projects: Array<{ id: string; name: string; address: string }>;
+  form: ReturnType<typeof useForm<OrderInput>>;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-b border-black/10 bg-[#fafaf8] px-5 py-3">
+      <span className="shrink-0 text-[11px] font-medium text-[#66645f]">
+        本单工地
+      </span>
+      <select
+        className="h-9 min-w-52 max-[600px]:min-w-0 max-[600px]:w-full rounded-lg border border-black/15 bg-white px-3 text-xs text-[#22211f]"
+        {...form.register("projectId", {
+          setValueAs: (value) => value || null,
+          onChange: () => form.setValue("projectName", null),
+        })}
+      >
+        <option value="">选择已有工地</option>
+        {projects.map((project) => (
+          <option key={project.id} value={project.id}>
+            {project.name}
+          </option>
+        ))}
+      </select>
+      <span className="text-[10px] text-[#9a9994]">或</span>
+      <Input
+        className="h-9 min-w-56 max-w-80 flex-1 text-xs max-[600px]:min-w-0 max-[600px]:basis-full max-[600px]:max-w-none"
+        placeholder="直接输入临时工地名称"
+        {...form.register("projectName", {
+          setValueAs: (value) =>
+            typeof value === "string" ? value.trim() || null : null,
+          onChange: (event) => {
+            if (event.target.value) form.setValue("projectId", null);
+          },
+        })}
+      />
+    </div>
+  );
 }
 
-type MaterialEntryProps={search:string;setSearch:(v:string)=>void;open:boolean;setOpen:(v:boolean)=>void;cursor:number;setCursor:(v:number|((v:number)=>number))=>void;materials:Material[];price:(m:Material)=>string;onAdd:(m:Material)=>void;inputRef:React.RefObject<HTMLInputElement|null>;loading:boolean;onCreate:()=>void};
-function MaterialEntry({search,setSearch,open,setOpen,cursor,setCursor,materials,price,onAdd,inputRef,loading,onCreate}:MaterialEntryProps){return <div className="relative border-b border-black/10 px-5 py-3"><label className="flex h-11 max-w-[760px] items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-[#8a8985] focus-within:border-[#7f95a9] focus-within:ring-[3px] focus-within:ring-[#6289ab26]"><Search size={17}/><input ref={inputRef} className="h-full min-w-0 flex-1 border-0 bg-transparent text-sm text-[#11110f] outline-none" placeholder="输入材料名称 / 品牌 / 规格，Enter 添加" value={search} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),120)} onChange={e=>{setSearch(e.target.value);setCursor(0);setOpen(true);}} onKeyDown={e=>{if(e.key==='ArrowDown'){e.preventDefault();setCursor(v=>Math.min(v+1,materials.length-1));}else if(e.key==='ArrowUp'){e.preventDefault();setCursor(v=>Math.max(v-1,0));}else if(e.key==='Enter'&&!e.nativeEvent.isComposing){e.preventDefault();if(materials[cursor])onAdd(materials[cursor]);}else if(e.key==='Escape')setOpen(false);}}/><kbd className="hidden text-[10px] text-[#aaa9a4] min-[600px]:block">↑↓ 选择 · Enter 添加</kbd></label>{open&&<div className="absolute left-5 top-[60px] z-40 max-h-72 w-[min(760px,calc(100%-40px))] overflow-auto rounded-[10px] border border-black/10 bg-[#fcfcfb] p-1 shadow-[0_14px_45px_#0000001f]">{loading?<div className="p-4 text-xs text-[#8a8985]">正在载入客户价格…</div>:materials.length?materials.map((material,index)=><button type="button" key={material.id} className={`flex w-full items-center justify-between gap-4 rounded-lg border-0 px-3 py-2.5 text-left ${index===cursor?'bg-[#e9e8e5]':'bg-transparent hover:bg-[#f1f1ef]'}`} onMouseDown={e=>e.preventDefault()} onMouseEnter={()=>setCursor(index)} onClick={()=>onAdd(material)}><span className="min-w-0"><strong className="block truncate text-[13px] font-medium">{material.brand} · {material.name}</strong><small className="mt-1 block text-[11px] text-[#8a8985]">{material.specification} · {material.category}</small></span><b className="shrink-0 text-xs font-medium tabular-nums">{formatMoney(price(material))} / {material.unit}</b></button>):<button type="button" className="w-full border-0 bg-transparent px-3 py-4 text-left text-xs hover:bg-[#f1f1ef]" onMouseDown={e=>e.preventDefault()} onClick={onCreate}><Plus className="mr-1 inline" size={14}/>新建材料“{search}”</button>}</div>}</div>;}
+function QuantityInput({
+  value,
+  unit,
+  onChange,
+  onConfirm,
+}: {
+  value: string;
+  unit: string;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+}) {
+  const step = (delta: number) =>
+    onChange(numberText(Math.max(0.001, (Number(value) || 0) + delta)));
+  return (
+    <div className="quantity-control flex h-9 w-[142px] items-center rounded-lg border border-black/15 bg-white">
+      <button
+        type="button"
+        className="grid h-full w-8 place-items-center border-0 bg-transparent hover:bg-[#f0efec]"
+        onClick={() => step(-1)}
+        aria-label="减少数量"
+      >
+        <Minus size={13} />
+      </button>
+      <input
+        className="h-full min-w-0 flex-1 border-x border-y-0 border-black/10 bg-transparent text-center text-xs tabular-nums outline-none"
+        inputMode="decimal"
+        aria-label={`数量（${unit}）`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            onConfirm();
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="grid h-full w-8 place-items-center border-0 bg-transparent hover:bg-[#f0efec]"
+        onClick={() => step(1)}
+        aria-label="增加数量"
+      >
+        <Plus size={13} />
+      </button>
+      <span className="w-8 text-center text-[10px] text-[#8a8985]">{unit}</span>
+    </div>
+  );
+}
 
-type OrderItemsProps={fields:Array<{id:string}>;items:OrderInput['items'];materials:Material[];picked:Record<string,Material>;flashId:string;form:ReturnType<typeof useForm<OrderInput>>;remove:(index:number)=>void;onQuantityConfirm:()=>void};
-function OrderItems({fields,items,materials,picked,flashId,form,remove,onQuantityConfirm}:OrderItemsProps){return <div className="min-h-40"><div className="grid grid-cols-[minmax(240px,1fr)_130px_150px_90px_120px_40px] gap-3 border-b border-black/10 bg-[#fafaf8] px-5 py-2.5 text-[11px] font-medium text-[#77756e] max-[1050px]:grid-cols-[minmax(210px,1fr)_130px_150px_120px_40px]"><span>材料 / 规格</span><span>单价</span><span>数量</span><span className="max-[1050px]:hidden">单位</span><span>小计</span><span/></div>{fields.length?fields.map((field,index)=>{const row=items[index];if(!row)return null;const material=picked[row.materialId]||materials.find(x=>x.id===row.materialId);return <div key={field.id} className={`grid grid-cols-[minmax(240px,1fr)_130px_150px_90px_120px_40px] items-center gap-3 border-b border-black/5 px-5 py-2.5 transition-colors max-[1050px]:grid-cols-[minmax(210px,1fr)_130px_150px_120px_40px] ${flashId===row.materialId?'bg-[#edf2e9]':'hover:bg-[#fcfcfa]'}`}><div className="min-w-0"><input type="hidden" {...form.register(`items.${index}.materialId`)}/><strong className="block truncate text-[13px] font-medium">{material?.brand} · {material?.name}</strong><small className="mt-1 block text-[10px] text-[#8a8985]">{material?.specification} · {material?.category}</small></div><div className="relative"><span className="absolute left-2.5 top-2 text-xs text-[#8a8985]">¥</span><Input className="h-9 pl-6 text-xs tabular-nums" inputMode="decimal" {...form.register(`items.${index}.unitPrice`)}/></div><QuantityInput value={row.quantity} unit={material?.unit||''} onChange={value=>form.setValue(`items.${index}.quantity`,value,{shouldDirty:true,shouldValidate:true})} onConfirm={onQuantityConfirm}/><span className="text-xs text-[#77756e] max-[1050px]:hidden">{material?.unit}</span><strong className="text-xs font-medium tabular-nums">{formatMoney(fromMinorUnits(calculate([row]).final))}</strong><Button type="button" size="icon" variant="ghost" className="size-8" onClick={()=>remove(index)} aria-label={`删除${material?.name}`}><Trash2 size={14}/></Button></div>}):<div className="grid min-h-32 place-items-center text-xs text-[#8a8985]">从常用材料点击添加，或在上方连续搜索录入</div>}</div>;}
+function SuccessPanel({
+  order,
+  worker,
+  onContinue,
+  onNew,
+}: {
+  order: Order;
+  worker?: Worker;
+  onContinue: () => void;
+  onNew: () => void;
+}) {
+  const debt = money(worker?.receivable) + money(order.addedReceivable);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onContinue();
+      }}
+    >
+      <DialogContent className="max-w-[560px]">
+        <div className="mb-2 grid size-11 place-items-center rounded-full bg-[#e7eee3] text-[#4f7045]">
+          <Check size={22} />
+        </div>
+        <DialogTitle>开单成功</DialogTitle>
+        <DialogDescription>
+          {order.workerName} · {order.orderNo}
+        </DialogDescription>
+        <div className="grid grid-cols-2 gap-3 rounded-xl bg-[#f5f5f2] p-4">
+          <div>
+            <span className="text-xs text-[#77756e]">本单金额</span>
+            <strong className="mt-1 block text-xl font-medium tabular-nums">
+              {formatMoney(order.finalAmount)}
+            </strong>
+          </div>
+          <div>
+            <span className="text-xs text-[#77756e]">开单后欠款</span>
+            <strong className="mt-1 block text-xl font-medium tabular-nums text-[#a34e40]">
+              {formatMoney(fromMinorUnits(debt))}
+            </strong>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <Button onClick={onContinue}>继续给{order.workerName}开单</Button>
+          <Button variant="outline" onClick={onNew}>
+            开新单
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/orders?workerId=${order.workerId}`}>查看账单</Link>
+          </Button>
+          <Button variant="outline" onClick={() => window.print()}>
+            打印 / 导出
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-type CheckoutProps={paymentMode:'ACCOUNT'|PaymentMethod;choosePayment:(v:'ACCOUNT'|PaymentMethod)=>void;advanced:boolean;setAdvanced:(v:boolean)=>void;form:ReturnType<typeof useForm<OrderInput>>;fieldsCount:number;totals:ReturnType<typeof calculate>;debt:string;afterDebt:bigint};
-function Checkout({paymentMode,choosePayment,advanced,setAdvanced,form,fieldsCount,totals,debt,afterDebt}:CheckoutProps){return <section className="mt-4 grid grid-cols-[1fr_330px] gap-4 max-[920px]:grid-cols-1"><div className="rounded-[14px] border border-black/10 bg-white p-5"><div className="mb-3 flex justify-between"><h2 className="text-sm font-medium">付款方式</h2><span className="text-[11px] text-[#8a8985]">默认记账，未付金额进入客户欠款</span></div><div className="flex flex-wrap gap-2">{paymentOptions.map(option=><button type="button" key={option.value} className={`rounded-lg border px-3.5 py-2 text-xs ${paymentMode===option.value?'border-black bg-black text-white':'border-black/10 bg-white hover:bg-[#f0efec]'}`} onClick={()=>choosePayment(option.value)}>{option.label}</button>)}</div>{paymentMode!=='ACCOUNT'&&<label className="mt-4 block max-w-56"><span className="mb-1.5 block text-[11px] text-[#77756e]">本次实收金额</span><Input inputMode="decimal" {...form.register('paymentAmount')}/></label>}<button type="button" className="mt-4 inline-flex items-center gap-1 border-0 bg-transparent p-0 text-xs text-[#66645f]" onClick={()=>setAdvanced(!advanced)}>更多信息 {advanced?<ChevronUp size={14}/>:<ChevronDown size={14}/>}</button>{advanced&&<div className="mt-4 grid grid-cols-2 gap-3 border-t border-black/10 pt-4 max-[600px]:grid-cols-1"><label><span className="mb-1.5 block text-[11px] text-[#77756e]">业务日期</span><Input type="datetime-local" {...form.register('occurredAt')}/></label><label><span className="mb-1.5 block text-[11px] text-[#77756e]">预存抵扣</span><Input inputMode="decimal" {...form.register('prepaidDeduction')}/></label><label><span className="mb-1.5 block text-[11px] text-[#77756e]">备注</span><Input {...form.register('note')}/></label></div>}</div><aside className="rounded-[14px] border border-black/10 bg-[#fafaf8] p-5"><div className="mb-3 flex justify-between text-xs"><span>{fieldsCount} 种材料</span><span>商品数量 {numberText(totals.count)}</span></div><dl className="grid gap-2 text-xs [&>div]:flex [&>div]:justify-between"><div><dt>商品金额</dt><dd>{formatMoney(fromMinorUnits(totals.goods))}</dd></div><div><dt>优惠</dt><dd>- {formatMoney(fromMinorUnits(totals.discount))}</dd></div><div className="mt-1 border-t border-black/10 pt-3"><dt className="font-medium">应收金额</dt><dd className="text-xl font-medium tabular-nums">{formatMoney(fromMinorUnits(totals.final))}</dd></div><div className="mt-2"><dt>原欠款</dt><dd>{formatMoney(debt)}</dd></div><div><dt className="font-medium">开单后欠款</dt><dd className="font-medium text-[#a34e40]">{formatMoney(fromMinorUnits(afterDebt))}</dd></div></dl></aside></section>;}
+export function OrderCreatePage() {
+  const [workerForm, setWorkerForm] = useState(false),
+    [materialForm, setMaterialForm] = useState(false),
+    [advanced, setAdvanced] = useState(false),
+    [materialSearch, setMaterialSearch] = useState(""),
+    [materialOpen, setMaterialOpen] = useState(false),
+    [materialCursor, setMaterialCursor] = useState(0),
+    [paymentMode, setPaymentMode] = useState<"ACCOUNT" | PaymentMethod>(
+      "ACCOUNT",
+    ),
+    [created, setCreated] = useState<Order>(),
+    [pendingWorker, setPendingWorker] = useState<Worker | null>(),
+    [flashId, setFlashId] = useState("");
+  const materialRef = useRef<HTMLInputElement>(null);
+  const form = useForm<OrderInput>({
+    resolver: zodResolver(orderInputSchema),
+    defaultValues: defaults(),
+  });
+  const fields = useFieldArray({ control: form.control, name: "items" });
+  const workerId = useWatch({ control: form.control, name: "workerId" });
+  const occurredAt = useWatch({ control: form.control, name: "occurredAt" });
+  const items = useWatch({
+    control: form.control,
+    name: "items",
+    defaultValue: [],
+  });
+  const paymentAmount =
+    useWatch({ control: form.control, name: "paymentAmount" }) || "0.00";
+  const prepaidDeduction =
+    useWatch({ control: form.control, name: "prepaidDeduction" }) || "0.00";
+  const [picked, setPicked] = useState<Record<string, Material>>({});
+  const validPricingTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(
+    occurredAt || "",
+  );
+  const pricingAt = validPricingTime ? toApiDateTime(occurredAt) : "";
+  const workers = useQuery({
+      queryKey: ["workers", "order-options"],
+      queryFn: ({ signal }) =>
+        workersApi.list({ pageSize: 50, status: "ACTIVE" }, signal),
+    }),
+    projects = useQuery({
+      queryKey: ["projects", "order-options"],
+      queryFn: ({ signal }) =>
+        projectsApi.list({ pageSize: 50, status: "ACTIVE" }, signal),
+    }),
+    teams = useQuery({
+      queryKey: ["teams", "order-options"],
+      queryFn: ({ signal }) => teamsApi.list({ pageSize: 50 }, signal),
+    }),
+    materials = useQuery({
+      queryKey: ["materials", "order-options"],
+      queryFn: async ({ signal }) => ({
+        items: await materialsApi.listActive(signal),
+      }),
+    }),
+    orders = useQuery({
+      queryKey: ["orders", "quick-order-history"],
+      queryFn: ({ signal }) => ordersApi.list({ pageSize: 50 }, signal),
+    }),
+    pricing = useQuery({
+      queryKey: ["pricing", workerId, pricingAt],
+      queryFn: ({ signal }) =>
+        pricingApi.list(workerId, { at: pricingAt }, signal),
+      enabled: !!workerId && validPricingTime,
+    });
+  const previousEffectivePrices = useRef<Record<string, string>>({});
+  const selectedWorker = workers.data?.items.find((x) => x.id === workerId);
+  const workerOrders = useMemo(
+    () =>
+      orders.data?.items
+        .filter((x) => x.workerId === workerId)
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)) || [],
+    [orders.data, workerId],
+  );
+  const lastOrder = workerOrders[0];
+  const totals = calculate(items);
+  const remaining =
+    totals.final - money(paymentAmount) - money(prepaidDeduction);
+  const afterDebt =
+    money(selectedWorker?.receivable) + (remaining > 0n ? remaining : 0n);
+  const frequent = useMemo(() => {
+    const scores = new Map<string, number>();
+    workerOrders.forEach((order, i) =>
+      order.items.forEach((item) =>
+        scores.set(
+          item.materialId,
+          (scores.get(item.materialId) || 0) + Math.max(1, 8 - i),
+        ),
+      ),
+    );
+    return [...(materials.data?.items || [])]
+      .sort(
+        (a, b) =>
+          (scores.get(b.id) || b.salesCount) -
+          (scores.get(a.id) || a.salesCount),
+      )
+      .slice(0, 5);
+  }, [materials.data, workerOrders]);
+  const filtered = useMemo(() => {
+    const q = materialSearch.trim().toLowerCase();
+    return (materials.data?.items || [])
+      .filter(
+        (x) =>
+          !q ||
+          `${x.name}${x.brand}${x.specification}${x.category}`
+            .toLowerCase()
+            .includes(q),
+      )
+      .sort((a, b) => (q ? 0 : b.salesCount - a.salesCount));
+  }, [materials.data, materialSearch]);
+  const reset = (keepWorker = false) => {
+    const id = keepWorker ? form.getValues("workerId") : "";
+    form.reset({ ...defaults(), workerId: id });
+    fields.replace([]);
+    setPicked({});
+    setPaymentMode("ACCOUNT");
+    setAdvanced(false);
+    setMaterialSearch("");
+  };
+  const selectWorker = (worker?: Worker) => {
+    if (!worker) {
+      if (items.length) setPendingWorker(null);
+      else form.setValue("workerId", "");
+      return;
+    }
+    if (worker.id !== workerId && items.length) {
+      setPendingWorker(worker);
+      return;
+    }
+    form.setValue("workerId", worker.id, { shouldValidate: true });
+    form.setValue("projectId", null);
+    form.setValue("projectName", null);
+    if (window.matchMedia("(pointer: fine)").matches) setTimeout(() => materialRef.current?.focus(), 80);
+  };
+  const price = (material: Material) =>
+    pricing.data?.find((x) => x.materialId === material.id)?.effectivePrice ||
+    material.defaultPrice;
+  const flash = (id: string) => {
+    setFlashId(id);
+    window.setTimeout(
+      () => setFlashId((value) => (value === id ? "" : value)),
+      550,
+    );
+  };
+  const add = (material: Material) => {
+    const index = form
+      .getValues("items")
+      .findIndex((x) => x.materialId === material.id);
+    if (index >= 0) {
+      form.setValue(
+        `items.${index}.quantity`,
+        numberText(
+          (Number(form.getValues(`items.${index}.quantity`)) || 0) + 1,
+        ),
+        { shouldDirty: true, shouldValidate: true },
+      );
+      flash(material.id);
+    } else {
+      setPicked((x) => ({ ...x, [material.id]: material }));
+      fields.append(
+        {
+          materialId: material.id,
+          quantity: "1",
+          unitPrice: price(material),
+          discount: "0.00",
+        },
+        { shouldFocus: false },
+      );
+      flash(material.id);
+    }
+    setMaterialSearch("");
+    setMaterialOpen(true);
+    setMaterialCursor(0);
+    if (window.matchMedia("(pointer: fine)").matches) requestAnimationFrame(() => materialRef.current?.focus());
+  };
+  const copyPrevious = () => {
+    if (!lastOrder) return;
+    const active = materials.data?.items || [];
+    const next = lastOrder.items
+      .filter((item) => active.some((x) => x.id === item.materialId))
+      .map((item) => {
+        const material = active.find((x) => x.id === item.materialId)!;
+        return {
+          materialId: item.materialId,
+          quantity: item.quantity,
+          unitPrice: price(material),
+          discount: "0.00",
+        };
+      });
+    fields.replace(next);
+    setPicked(
+      Object.fromEntries(
+        active
+          .filter((x) => next.some((row) => row.materialId === x.id))
+          .map((x) => [x.id, x]),
+      ),
+    );
+    toast.success("已复制上一单，可直接调整数量");
+  };
+  const choosePayment = (value: "ACCOUNT" | PaymentMethod) => {
+    setPaymentMode(value);
+    form.setValue("paymentMethod", value === "ACCOUNT" ? null : value);
+    form.setValue(
+      "paymentAmount",
+      value === "ACCOUNT" ? "0.00" : fromMinorUnits(totals.final),
+    );
+  };
+  const submit = useMutation({
+    mutationFn: (input: OrderInput) =>
+      ordersApi.create(input, createIdempotencyKey()),
+    onSuccess: (order) => {
+      setCreated(order);
+      toast.success(`用料单 ${order.orderNo} 已创建`);
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  const confirm = () => {
+    void form.handleSubmit(
+      (input) => submit.mutate(input),
+      (errors) =>
+        toast.error(
+          errors.workerId?.message || errors.items?.message || "请检查开单信息",
+        ),
+    )();
+  };
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => {
+      if (items.length && !created) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [items.length, created]);
+  useEffect(() => {
+    if (!pricing.data) return;
+    const next = Object.fromEntries(
+      pricing.data.map((item) => [item.materialId, item.effectivePrice]),
+    );
+    form.getValues("items").forEach((line, index) => {
+      const fallback = materials.data?.items.find(
+        (item) => item.id === line.materialId,
+      )?.defaultPrice;
+      const previous =
+        previousEffectivePrices.current[line.materialId] ?? fallback;
+      if (
+        previous &&
+        line.unitPrice === previous &&
+        next[line.materialId] &&
+        next[line.materialId] !== line.unitPrice
+      )
+        form.setValue(`items.${index}.unitPrice`, next[line.materialId], {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+    });
+    previousEffectivePrices.current = next;
+  }, [pricing.data, materials.data, form]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement).tagName;
+      if (event.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(tag)) {
+        event.preventDefault();
+        materialRef.current?.focus();
+      }
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        confirm();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+  if (
+    workers.isPending ||
+    materials.isPending ||
+    projects.isPending ||
+    teams.isPending ||
+    orders.isPending
+  )
+    return <LoadingState label="正在准备快速开单…" />;
+  if (
+    workers.isError ||
+    materials.isError ||
+    projects.isError ||
+    teams.isError ||
+    orders.isError
+  )
+    return (
+      <ErrorState
+        error={
+          workers.error ||
+          materials.error ||
+          projects.error ||
+          teams.error ||
+          orders.error
+        }
+      />
+    );
+  return (
+    <div className="order-create min-w-0 pb-20">
+      <header className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <p className="mb-1.5 text-xs text-[#8a8985]">业务管理 / 快速开单</p>
+          <h1 className="font-serif text-[28px] font-medium">快速开单</h1>
+          <p className="mt-2 text-[12px] text-[#77756e]">
+            像收银台一样连续录入，按 / 随时回到材料搜索。
+          </p>
+        </div>
+        <time className="hidden text-xs text-[#77756e] min-[700px]:block">
+          业务日期 {formatStoreDate(form.getValues("occurredAt"))}
+        </time>
+      </header>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          confirm();
+        }}
+      >
+        <section className="overflow-visible rounded-[14px] border border-black/10 bg-white">
+          <CustomerSelector
+            workers={workers.data.items}
+            selected={selectedWorker}
+            onSelect={selectWorker}
+            onCreate={() => setWorkerForm(true)}
+          />
+          {selectedWorker && (
+            <>
+              <ProjectSelector
+                projects={projects.data.items.filter((project) =>
+                  project.workerIds.includes(workerId),
+                )}
+                form={form}
+              />
+              <div className="border-b border-black/10 px-5 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mr-1 text-[11px] text-[#8a8985]">
+                    {selectedWorker.name}常用
+                  </span>
+                  {frequent.map((material) => (
+                    <button
+                      type="button"
+                      key={material.id}
+                      className="rounded-lg border border-black/10 bg-[#fafaf8] px-3 py-2 text-left hover:bg-[#efeeeb]"
+                      onClick={() => add(material)}
+                    >
+                      <strong className="block max-w-44 truncate text-xs font-medium">
+                        {material.brand} · {material.name}
+                      </strong>
+                      <small className="mt-1 block text-[10px] text-[#8a8985]">
+                        {material.specification} ·{" "}
+                        {formatMoney(price(material))}/{material.unit}
+                      </small>
+                    </button>
+                  ))}
+                  {lastOrder && (
+                    <button
+                      type="button"
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs hover:bg-[#f0efec]"
+                      onClick={copyPrevious}
+                    >
+                      <Copy size={13} />
+                      复制上一单 · {dateText(lastOrder.occurredAt)} ·{" "}
+                      {formatMoney(lastOrder.finalAmount)}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <MaterialEntry
+                search={materialSearch}
+                setSearch={setMaterialSearch}
+                open={materialOpen}
+                setOpen={setMaterialOpen}
+                cursor={materialCursor}
+                setCursor={setMaterialCursor}
+                materials={filtered}
+                price={price}
+                onAdd={add}
+                inputRef={materialRef}
+                loading={pricing.isPending}
+                onCreate={() => setMaterialForm(true)}
+              />
+              <OrderItems
+                fields={fields.fields}
+                items={items}
+                materials={materials.data.items}
+                picked={picked}
+                flashId={flashId}
+                form={form}
+                remove={fields.remove}
+                onQuantityConfirm={() => materialRef.current?.focus()}
+              />
+            </>
+          )}
+        </section>
+        {selectedWorker && (
+          <>
+            <Checkout
+              paymentMode={paymentMode}
+              choosePayment={choosePayment}
+              advanced={advanced}
+              setAdvanced={setAdvanced}
+              form={form}
+              fieldsCount={fields.fields.length}
+              totals={totals}
+              debt={selectedWorker.receivable}
+              afterDebt={afterDebt}
+            />
+            <div className="order-submit sticky bottom-0 z-30 mt-4 flex items-center justify-between gap-4 rounded-[14px] border border-black/10 bg-[#fcfcfbf2] px-5 py-3 shadow-[0_-8px_30px_#0000000d] backdrop-blur">
+              <div>
+                <span className="text-xs text-[#77756e]">
+                  {fields.fields.length} 种材料 · {numberText(totals.count)} 件
+                </span>
+                <strong className="ml-4 text-base font-medium tabular-nums">
+                  应收 {formatMoney(fromMinorUnits(totals.final))}
+                </strong>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="hidden text-[10px] text-[#8a8985] min-[720px]:block">
+                  ⌘/Ctrl + Enter
+                </span>
+                <Button
+                  type="submit"
+                  className="h-10 px-5"
+                  disabled={!fields.fields.length || submit.isPending}
+                >
+                  {submit.isPending ? "正在开单…" : "确认开单"}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </form>
+      <WorkerForm
+        open={workerForm}
+        onOpenChange={setWorkerForm}
+        teams={teams.data.items}
+        onSuccess={(worker) => selectWorker(worker)}
+      />
+      <MaterialForm
+        open={materialForm}
+        onOpenChange={setMaterialForm}
+        onSuccess={(material) => add(material)}
+      />
+      <Dialog
+        open={pendingWorker !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setPendingWorker(undefined);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>当前订单尚未保存</DialogTitle>
+          <DialogDescription>
+            {pendingWorker ? "更换客户" : "返回客户选择"}会清空已经录入的材料。
+          </DialogDescription>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPendingWorker(undefined)}
+            >
+              继续编辑
+            </Button>
+            <Button
+              onClick={() => {
+                const next = pendingWorker;
+                setPendingWorker(undefined);
+                reset();
+                if (next)
+                  form.setValue("workerId", next.id, { shouldValidate: true });
+              }}
+            >
+              放弃订单
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {created && (
+        <SuccessPanel
+          order={created}
+          worker={selectedWorker}
+          onContinue={() => {
+            setCreated(undefined);
+            reset(true);
+            if (window.matchMedia("(pointer: fine)").matches) requestAnimationFrame(() => materialRef.current?.focus());
+          }}
+          onNew={() => {
+            setCreated(undefined);
+            reset();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+type MaterialEntryProps = {
+  search: string;
+  setSearch: (v: string) => void;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  cursor: number;
+  setCursor: (v: number | ((v: number) => number)) => void;
+  materials: Material[];
+  price: (m: Material) => string;
+  onAdd: (m: Material) => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  loading: boolean;
+  onCreate: () => void;
+};
+function MaterialEntry({
+  search,
+  setSearch,
+  open,
+  setOpen,
+  cursor,
+  setCursor,
+  materials,
+  price,
+  onAdd,
+  inputRef,
+  loading,
+  onCreate,
+}: MaterialEntryProps) {
+  return (
+    <div className="material-entry relative min-w-0 border-b border-black/10 px-5 py-3">
+      <label className="flex h-11 max-w-[760px] items-center gap-2 rounded-lg border border-black/15 bg-white px-3 text-[#8a8985] focus-within:border-[#7f95a9] focus-within:ring-[3px] focus-within:ring-[#6289ab26]">
+        <Search size={17} />
+        <input
+          ref={inputRef}
+          className="h-full min-w-0 flex-1 border-0 bg-transparent text-sm text-[#11110f] outline-none"
+          placeholder="搜索材料名称 / 品牌 / 规格"
+          aria-label="搜索材料"
+          value={search}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCursor(0);
+            setOpen(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setCursor((v) => Math.min(v + 1, materials.length - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setCursor((v) => Math.max(v - 1, 0));
+            } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (materials[cursor]) onAdd(materials[cursor]);
+            } else if (e.key === "Escape") setOpen(false);
+          }}
+        />
+        <kbd className="hidden text-[10px] text-[#aaa9a4] min-[600px]:block">
+          ↑↓ 选择 · Enter 添加
+        </kbd>
+      </label>
+      {open && (
+        <div className="material-options absolute left-5 top-[60px] z-40 max-h-[min(60vh,480px)] w-[min(760px,calc(100%-40px))] overflow-y-auto rounded-[10px] border border-black/10 bg-[#fcfcfb] p-1 shadow-[0_14px_45px_#0000001f]">
+          {!loading && materials.length > 0 && (
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black/5 bg-[#fcfcfb] px-3 py-2 text-[11px] text-[#77756e]">
+              <span>{search.trim() ? "匹配" : "可选"}材料共 {materials.length} 种</span>
+              <span className="max-[760px]:hidden">滑动浏览 · 点击添加</span>
+              <button
+                type="button"
+                className="hidden min-h-11 px-3 text-xs max-[760px]:block"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setOpen(false);
+                  inputRef.current?.blur();
+                }}
+              >
+                收起
+              </button>
+            </div>
+          )}
+          {loading ? (
+            <div className="p-4 text-xs text-[#8a8985]">正在载入客户价格…</div>
+          ) : materials.length ? (
+            materials.map((material, index) => (
+              <button
+                type="button"
+                key={material.id}
+                className={`flex w-full items-center justify-between gap-4 rounded-lg border-0 px-3 py-2.5 text-left ${index === cursor ? "bg-[#e9e8e5]" : "bg-transparent hover:bg-[#f1f1ef]"}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setCursor(index)}
+                onClick={() => onAdd(material)}
+              >
+                <span className="min-w-0">
+                  <strong className="block break-words text-[13px] font-medium">
+                    {material.brand} · {material.name}
+                  </strong>
+                  <small className="mt-1 block text-[11px] text-[#8a8985]">
+                    {material.specification} · {material.category}
+                  </small>
+                </span>
+                <b className="shrink-0 text-xs font-medium tabular-nums">
+                  {formatMoney(price(material))} / {material.unit}
+                </b>
+              </button>
+            ))
+          ) : (
+            <button
+              type="button"
+              className="w-full border-0 bg-transparent px-3 py-4 text-left text-xs hover:bg-[#f1f1ef]"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onCreate}
+            >
+              <Plus className="mr-1 inline" size={14} />
+              新建材料“{search}”
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type OrderItemsProps = {
+  fields: Array<{ id: string }>;
+  items: OrderInput["items"];
+  materials: Material[];
+  picked: Record<string, Material>;
+  flashId: string;
+  form: ReturnType<typeof useForm<OrderInput>>;
+  remove: (index: number) => void;
+  onQuantityConfirm: () => void;
+};
+function OrderItems({
+  fields,
+  items,
+  materials,
+  picked,
+  flashId,
+  form,
+  remove,
+  onQuantityConfirm,
+}: OrderItemsProps) {
+  return (
+    <div className="order-items min-w-0 min-h-40">
+      <div className="grid grid-cols-[minmax(240px,1fr)_130px_150px_90px_120px_40px] gap-3 border-b border-black/10 bg-[#fafaf8] px-5 py-2.5 text-[11px] font-medium text-[#77756e] max-[1050px]:grid-cols-[minmax(210px,1fr)_130px_150px_120px_40px]">
+        <span>材料 / 规格</span>
+        <span>单价</span>
+        <span>数量</span>
+        <span className="max-[1050px]:hidden">单位</span>
+        <span>小计</span>
+        <span />
+      </div>
+      {fields.length ? (
+        fields.map((field, index) => {
+          const row = items[index];
+          if (!row) return null;
+          const material =
+            picked[row.materialId] ||
+            materials.find((x) => x.id === row.materialId);
+          return (
+            <div
+              key={field.id}
+              className={`order-item grid grid-cols-[minmax(240px,1fr)_130px_150px_90px_120px_40px] items-center gap-3 border-b border-black/5 px-5 py-2.5 transition-colors max-[1050px]:grid-cols-[minmax(210px,1fr)_130px_150px_120px_40px] ${flashId === row.materialId ? "bg-[#edf2e9]" : "hover:bg-[#fcfcfa]"}`}
+            >
+              <div className="min-w-0">
+                <input
+                  type="hidden"
+                  {...form.register(`items.${index}.materialId`)}
+                />
+                <strong className="block truncate text-[13px] font-medium">
+                  {material?.brand} · {material?.name}
+                </strong>
+                <small className="mt-1 block text-[10px] text-[#8a8985]">
+                  {material?.specification} · {material?.category}
+                </small>
+              </div>
+              <div className="relative">
+                <span className="absolute left-2.5 top-2 text-xs text-[#8a8985]">
+                  ¥
+                </span>
+                <Input
+                  aria-label={`${material?.name || "材料"}单价`}
+                  className="h-9 pl-6 text-xs tabular-nums"
+                  inputMode="decimal"
+                  {...form.register(`items.${index}.unitPrice`)}
+                />
+              </div>
+              <QuantityInput
+                value={row.quantity}
+                unit={material?.unit || ""}
+                onChange={(value) =>
+                  form.setValue(`items.${index}.quantity`, value, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                onConfirm={onQuantityConfirm}
+              />
+              <span className="text-xs text-[#77756e] max-[1050px]:hidden">
+                {material?.unit}
+              </span>
+              <strong className="text-xs font-medium tabular-nums">
+                {formatMoney(fromMinorUnits(calculate([row]).final))}
+              </strong>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-8"
+                onClick={() => remove(index)}
+                aria-label={`删除${material?.name}`}
+              >
+                <Trash2 size={14} />
+              </Button>
+            </div>
+          );
+        })
+      ) : (
+        <div className="grid min-h-32 place-items-center text-xs text-[#8a8985]">
+          从常用材料点击添加，或在上方连续搜索录入
+        </div>
+      )}
+    </div>
+  );
+}
+
+type CheckoutProps = {
+  paymentMode: "ACCOUNT" | PaymentMethod;
+  choosePayment: (v: "ACCOUNT" | PaymentMethod) => void;
+  advanced: boolean;
+  setAdvanced: (v: boolean) => void;
+  form: ReturnType<typeof useForm<OrderInput>>;
+  fieldsCount: number;
+  totals: ReturnType<typeof calculate>;
+  debt: string;
+  afterDebt: bigint;
+};
+function Checkout({
+  paymentMode,
+  choosePayment,
+  advanced,
+  setAdvanced,
+  form,
+  fieldsCount,
+  totals,
+  debt,
+  afterDebt,
+}: CheckoutProps) {
+  return (
+    <section className="mt-4 grid grid-cols-[minmax(0,1fr)_330px] gap-4 max-[920px]:grid-cols-1">
+      <div className="rounded-[14px] border border-black/10 bg-white p-5">
+        <div className="mb-3 flex flex-wrap justify-between gap-2">
+          <h2 className="text-sm font-medium">付款方式</h2>
+          <span className="text-[11px] text-[#8a8985]">
+            默认记账，未付金额进入客户欠款
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {paymentOptions.map((option) => (
+            <button
+              type="button"
+              key={option.value}
+              className={`rounded-lg border px-3.5 py-2 text-xs ${paymentMode === option.value ? "border-black bg-black text-white" : "border-black/10 bg-white hover:bg-[#f0efec]"}`}
+              onClick={() => choosePayment(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {paymentMode !== "ACCOUNT" && (
+          <label className="mt-4 block max-w-56">
+            <span className="mb-1.5 block text-[11px] text-[#77756e]">
+              本次实收金额
+            </span>
+            <Input inputMode="decimal" {...form.register("paymentAmount")} />
+          </label>
+        )}
+        <button
+          type="button"
+          className="mt-4 inline-flex items-center gap-1 border-0 bg-transparent p-0 text-xs text-[#66645f]"
+          onClick={() => setAdvanced(!advanced)}
+        >
+          更多信息{" "}
+          {advanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+        {advanced && (
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-black/10 pt-4 max-[600px]:grid-cols-1">
+            <label>
+              <span className="mb-1.5 block text-[11px] text-[#77756e]">
+                业务日期
+              </span>
+              <Input type="datetime-local" {...form.register("occurredAt")} />
+            </label>
+            <label>
+              <span className="mb-1.5 block text-[11px] text-[#77756e]">
+                预存抵扣
+              </span>
+              <Input
+                inputMode="decimal"
+                {...form.register("prepaidDeduction")}
+              />
+            </label>
+            <label>
+              <span className="mb-1.5 block text-[11px] text-[#77756e]">
+                备注
+              </span>
+              <Input {...form.register("note")} />
+            </label>
+          </div>
+        )}
+      </div>
+      <aside className="rounded-[14px] border border-black/10 bg-[#fafaf8] p-5">
+        <div className="mb-3 flex justify-between text-xs">
+          <span>{fieldsCount} 种材料</span>
+          <span>商品数量 {numberText(totals.count)}</span>
+        </div>
+        <dl className="grid gap-2 text-xs [&>div]:flex [&>div]:justify-between">
+          <div>
+            <dt>商品金额</dt>
+            <dd>{formatMoney(fromMinorUnits(totals.goods))}</dd>
+          </div>
+          <div>
+            <dt>优惠</dt>
+            <dd>- {formatMoney(fromMinorUnits(totals.discount))}</dd>
+          </div>
+          <div className="mt-1 border-t border-black/10 pt-3">
+            <dt className="font-medium">应收金额</dt>
+            <dd className="text-xl font-medium tabular-nums">
+              {formatMoney(fromMinorUnits(totals.final))}
+            </dd>
+          </div>
+          <div className="mt-2">
+            <dt>原欠款</dt>
+            <dd>{formatMoney(debt)}</dd>
+          </div>
+          <div>
+            <dt className="font-medium">开单后欠款</dt>
+            <dd className="font-medium text-[#a34e40]">
+              {formatMoney(fromMinorUnits(afterDebt))}
+            </dd>
+          </div>
+        </dl>
+      </aside>
+    </section>
+  );
+}

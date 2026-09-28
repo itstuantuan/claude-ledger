@@ -95,6 +95,168 @@ button:focus-visible {
   margin-bottom: 8px;
 }
 
+/* Keep wide reports inside their own scroll areas, not the page viewport. */
+#main-content {
+  min-width: 0;
+}
+
+@media (max-width: 1200px) {
+  .order-items > div:first-child {
+    display: none;
+  }
+
+  .order-items .order-item {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .order-item > :first-child {
+    grid-column: 1 / -1;
+    padding-right: 44px;
+  }
+
+  .order-item > :first-child strong {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .order-item > :nth-child(2)::before {
+    content: '单价';
+    display: block;
+    margin-bottom: 6px;
+    color: #77756e;
+    font-size: 12px;
+  }
+
+  .order-item > :nth-child(2) > span {
+    top: auto;
+    bottom: 13px;
+  }
+
+  .order-item > :nth-child(3) {
+    align-self: end;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .order-item > :nth-child(4) {
+    display: none;
+  }
+
+  .order-item > strong::before {
+    content: '小计 ';
+    color: #77756e;
+    font-weight: normal;
+  }
+
+  .order-item > button {
+    justify-self: end;
+  }
+
+  .quantity-control {
+    height: 44px;
+  }
+
+  .quantity-control button {
+    width: 40px;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .material-entry .material-options {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    margin-top: 8px;
+    max-height: 45dvh;
+    overscroll-behavior-y: contain;
+  }
+
+  .material-options > button {
+    gap: 8px;
+    min-height: 56px;
+  }
+
+  .material-options > button > b {
+    max-width: 45%;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+}
+
+@media (max-width: 600px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+  select,
+  textarea {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  [data-slot='button'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  #main-content > header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  #main-content > header h1 {
+    font-size: 23px;
+  }
+
+  .dialog-panel:not([data-mobile-navigation]) {
+    padding: 20px;
+    overscroll-behavior: contain;
+    scroll-padding-block: 16px;
+  }
+
+  .dialog-panel .grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dialog-panel dl > div {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .order-create .material-entry {
+    padding: 12px;
+  }
+
+  .order-create .material-entry > label {
+    height: 48px;
+  }
+
+  .order-submit {
+    flex-wrap: wrap;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .order-submit > div:first-child {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .order-submit > div:first-child strong {
+    margin-left: 0;
+  }
+
+  .order-submit > div:last-child,
+  .order-submit button {
+    width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

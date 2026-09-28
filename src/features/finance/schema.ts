@@ -21,7 +21,8 @@ const financeRecordBase = z.object({
 });
 export const paymentSchema = financeRecordBase.extend({
   receivableBefore: z.string(), receivableAfter: z.string(), unallocatedAmount: z.string().default('0.00'),
-  allocations: z.array(z.object({ orderId: z.string(), orderNo: z.string(), amount: z.string() })).default([]),
+  // Older API versions serialize an empty Go slice as null.
+  allocations: z.array(z.object({ orderId: z.string(), orderNo: z.string(), amount: z.string() })).nullish().transform((value) => value ?? []),
 });
 export const prepaidSchema = financeRecordBase.extend({ balanceBefore: z.string(), balanceAfter: z.string() });
 export const paymentPageSchema = pageMetaSchema.extend({ items: z.array(paymentSchema) });

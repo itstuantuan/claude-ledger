@@ -1,6 +1,7 @@
 import { api } from './auth';
 import { materialPageSchema, materialSchema, pricingListSchema, type MaterialInput, type PricingBatchInput } from '@/features/materials/schema';
 import type { ListParams } from './customers';
+import { collectPages } from './pagination';
 
 function query(params: ListParams = {}) {
   const search = new URLSearchParams();
@@ -10,6 +11,8 @@ function query(params: ListParams = {}) {
 
 export const materialsApi = {
   list: (params?: ListParams, signal?: AbortSignal) => api.request(`/materials${query(params)}`, materialPageSchema, { signal }),
+  listActive: (signal?: AbortSignal) => collectPages((page) =>
+    api.request(`/materials${query({ page, pageSize: 50, status: 'ACTIVE' })}`, materialPageSchema, { signal })),
   create: (input: MaterialInput) => api.request('/materials', materialSchema, { method: 'POST', body: input }),
   update: (id: string, input: MaterialInput) => api.request(`/materials/${id}`, materialSchema, { method: 'PATCH', body: input }),
 };
